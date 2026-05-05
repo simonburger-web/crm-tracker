@@ -26,20 +26,51 @@ def dashboard(request):
     return render(request, 'crm/dashboard.html', context)
 
 
-def contact_list(request):
-    contacts = Contact.objects.all()
+def _filter_contacts(request, queryset):
     q = request.GET.get('q', '')
     status = request.GET.get('status', '')
     if q:
-        contacts = contacts.filter(Q(name__icontains=q) | Q(email__icontains=q) | Q(company__icontains=q))
+        queryset = queryset.filter(Q(name__icontains=q) | Q(email__icontains=q) | Q(company__icontains=q))
     if status:
-        contacts = contacts.filter(status=status)
+        queryset = queryset.filter(status=status)
+    return queryset, q, status
+
+
+def contact_list(request):
+    contacts = Contact.objects.all()
+    contacts, q, status = _filter_contacts(request, contacts)
     return render(request, 'crm/contact_list.html', {
         'us_contacts': contacts.filter(region='us'),
         'sa_contacts': contacts.filter(region='sa'),
         'q': q,
         'status': status,
         'status_choices': Contact.STATUS_CHOICES,
+    })
+
+
+def us_leads(request):
+    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='us'))
+    return render(request, 'crm/region_leads.html', {
+        'contacts': contacts,
+        'q': q,
+        'status': status,
+        'status_choices': Contact.STATUS_CHOICES,
+        'region': 'us',
+        'region_label': 'US Leads',
+        'clear_url': 'us_leads',
+    })
+
+
+def sa_leads(request):
+    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa'))
+    return render(request, 'crm/region_leads.html', {
+        'contacts': contacts,
+        'q': q,
+        'status': status,
+        'status_choices': Contact.STATUS_CHOICES,
+        'region': 'sa',
+        'region_label': 'SA Leads',
+        'clear_url': 'sa_leads',
     })
 
 
