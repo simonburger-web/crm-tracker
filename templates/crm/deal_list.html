@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Closed Deals — CRM Tracker{% endblock %}
+{% block page_title %}Closed Deals{% endblock %}
+{% block header_actions %}
+  <a href="{% url 'deal_create' %}" class="btn-primary">+ Add Closed Deal</a>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="bg-white rounded-xl border border-gray-200 p-4 mb-5 flex flex-wrap gap-3">
+  <form method="get" class="flex flex-wrap gap-3 w-full">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search closed deals or leads..."
+      class="form-input flex-1 min-w-48">
+    <select name="stage" class="form-input w-44">
+      <option value="">All stages</option>
+      {% for val, label in stage_choices %}
+      <option value="{{ val }}" {% if stage == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn-primary">Search</button>
+    {% if q or stage %}<a href="{% url 'deal_list' %}" class="btn-secondary">Clear</a>{% endif %}
+  </form>
+</div>
+
+<!-- Stage tabs -->
+<div class="flex gap-2 mb-5 flex-wrap">
+  <a href="{% url 'deal_list' %}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if not stage %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">All</a>
+  {% for val, label in stage_choices %}
+  <a href="?stage={{ val }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if stage == val %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Closed Deal</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Close Date</th>
+        <th class="relative px-6 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for deal in deals %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-6 py-4">
+          <a href="{% url 'deal_detail' deal.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ deal.title }}</a>
+        </td>
+        <td class="px-6 py-4">
+          <a href="{% url 'contact_detail' deal.contact.pk %}" class="text-sm text-gray-600 hover:text-indigo-600">{{ deal.contact.name }}</a>
+        </td>
+        <td class="px-6 py-4 text-sm font-semibold text-gray-900">${{ deal.value|floatformat:0 }}</td>
+        <td class="px-6 py-4">
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+            {% if deal.stage == 'won' %}bg-green-100 text-green-800
+            {% elif deal.stage == 'lost' %}bg-red-100 text-red-800
+            {% elif deal.stage == 'negotiation' %}bg-orange-100 text-orange-800
+            {% elif deal.stage == 'proposal' %}bg-blue-100 text-blue-800
+            {% else %}bg-indigo-100 text-indigo-800{% endif %}">
+            {{ deal.get_stage_display }}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-600">{{ deal.close_date|date:"M d, Y"|default:"—" }}</td>
+        <td class="px-6 py-4 text-right text-sm">
+          <a href="{% url 'deal_edit' deal.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
+          <a href="{% url 'deal_delete' deal.pk %}" class="text-gray-400 hover:text-red-600">Delete</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-400">No closed deals found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

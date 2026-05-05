@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ deal.title }} — CRM Tracker{% endblock %}
+{% block page_title %}{{ deal.title }}{% endblock %}
+{% block header_actions %}
+  <a href="{% url 'deal_edit' deal.pk %}" class="btn-secondary">Edit Closed Deal</a>
+  <a href="{% url 'deal_delete' deal.pk %}" class="btn-danger">Delete</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- Closed deal info -->
+  <div class="lg:col-span-1 space-y-5">
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <dl class="space-y-4 text-sm">
+        <div>
+          <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Stage</dt>
+          <dd>
+            <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium
+              {% if deal.stage == 'won' %}bg-green-100 text-green-800
+              {% elif deal.stage == 'lost' %}bg-red-100 text-red-800
+              {% elif deal.stage == 'negotiation' %}bg-orange-100 text-orange-800
+              {% elif deal.stage == 'proposal' %}bg-blue-100 text-blue-800
+              {% else %}bg-indigo-100 text-indigo-800{% endif %}">
+              {{ deal.get_stage_display }}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Value</dt>
+          <dd class="text-2xl font-bold text-gray-900">${{ deal.value|floatformat:2 }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Lead</dt>
+          <dd><a href="{% url 'contact_detail' deal.contact.pk %}" class="text-indigo-600 hover:underline font-medium">{{ deal.contact.name }}</a></dd>
+        </div>
+        {% if deal.close_date %}
+        <div>
+          <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Close Date</dt>
+          <dd class="text-gray-900">{{ deal.close_date|date:"M d, Y" }}</dd>
+        </div>
+        {% endif %}
+        <div>
+          <dt class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Created</dt>
+          <dd class="text-gray-900">{{ deal.created_at|date:"M d, Y" }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Notes -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">Notes</h3>
+      <form method="post" class="mb-4">
+        {% csrf_token %}
+        {{ note_form.body }}
+        <button type="submit" class="mt-2 btn-primary text-xs py-1.5">Add Note</button>
+      </form>
+      <ul class="space-y-3">
+        {% for note in deal.notes.all %}
+        <li class="bg-gray-50 rounded-lg p-3 text-sm">
+          <p class="text-gray-800">{{ note.body }}</p>
+          <div class="flex items-center justify-between mt-2">
+            <span class="text-xs text-gray-400">{{ note.created_at|date:"M d, Y H:i" }}</span>
+            <a href="{% url 'note_delete' note.pk %}" class="text-xs text-red-400 hover:text-red-600">Delete</a>
+          </div>
+        </li>
+        {% empty %}
+        <li class="text-xs text-gray-400">No notes yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- Stage progression -->
+  <div class="lg:col-span-2">
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h3 class="text-sm font-semibold text-gray-700 mb-5">Pipeline Progress</h3>
+      <div class="flex items-center gap-1">
+        {% for stage_val, stage_label in deal.STAGE_CHOICES %}
+        {% if stage_val != 'lost' %}
+        <div class="flex-1 text-center">
+          <div class="h-2 rounded-full mb-2 {% if deal.stage == stage_val %}bg-indigo-500{% elif deal.stage == 'won' %}bg-green-500{% else %}bg-gray-200{% endif %}"></div>
+          <span class="text-xs {% if deal.stage == stage_val %}text-indigo-600 font-semibold{% else %}text-gray-400{% endif %}">{{ stage_label }}</span>
+        </div>
+        {% if not forloop.last %}<div class="w-2 h-0.5 bg-gray-200 flex-shrink-0 mb-4"></div>{% endif %}
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% if deal.stage == 'lost' %}
+      <div class="mt-4 p-3 bg-red-50 rounded-lg text-sm text-red-700 font-medium text-center">Closed deal marked as Lost</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

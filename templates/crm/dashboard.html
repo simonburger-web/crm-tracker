@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — CRM Tracker{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block header_actions %}
+  <a href="{% url 'contact_create' %}" class="btn-secondary">+ Lead</a>
+  <a href="{% url 'deal_create' %}" class="btn-primary">+ Closed Deal</a>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Leads</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900">{{ total_contacts }}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Closed Deals</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900">{{ total_deals }}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Pipeline Value</p>
+    <p class="mt-2 text-3xl font-bold text-indigo-600">${{ pipeline_value|floatformat:0 }}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Won Value</p>
+    <p class="mt-2 text-3xl font-bold text-green-600">${{ won_value|floatformat:0 }}</p>
+  </div>
+</div>
+
+<!-- Pipeline stages -->
+<div class="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+  <h2 class="text-sm font-semibold text-gray-700 mb-4">Pipeline Stages</h2>
+  <div class="grid grid-cols-5 gap-3">
+    {% for stage, count, label in stage_data %}
+    <div class="text-center p-3 rounded-lg bg-gray-50 border border-gray-100">
+      <p class="text-2xl font-bold text-gray-900">{{ count }}</p>
+      <p class="text-xs text-gray-500 mt-1">{{ label }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Recent Leads -->
+  <div class="bg-white rounded-xl border border-gray-200">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 class="text-sm font-semibold text-gray-700">Recent Leads</h2>
+      <a href="{% url 'contact_list' %}" class="text-xs text-indigo-600 hover:underline">View all</a>
+    </div>
+    <ul class="divide-y divide-gray-50">
+      {% for contact in recent_contacts %}
+      <li class="px-6 py-3 flex items-center justify-between hover:bg-gray-50">
+        <div>
+          <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-gray-900 hover:text-indigo-600">{{ contact.name }}</a>
+          <p class="text-xs text-gray-500">{{ contact.company }}</p>
+        </div>
+        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+          {% if contact.status == 'customer' %}bg-green-100 text-green-800
+          {% elif contact.status == 'prospect' %}bg-blue-100 text-blue-800
+          {% elif contact.status == 'lead' %}bg-yellow-100 text-yellow-800
+          {% else %}bg-gray-100 text-gray-600{% endif %}">
+          {{ contact.get_status_display }}
+        </span>
+      </li>
+      {% empty %}
+      <li class="px-6 py-4 text-sm text-gray-400">No leads yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Recent Closed Deals -->
+  <div class="bg-white rounded-xl border border-gray-200">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 class="text-sm font-semibold text-gray-700">Recent Closed Deals</h2>
+      <a href="{% url 'deal_list' %}" class="text-xs text-indigo-600 hover:underline">View all</a>
+    </div>
+    <ul class="divide-y divide-gray-50">
+      {% for deal in recent_deals %}
+      <li class="px-6 py-3 flex items-center justify-between hover:bg-gray-50">
+        <div>
+          <a href="{% url 'deal_detail' deal.pk %}" class="text-sm font-medium text-gray-900 hover:text-indigo-600">{{ deal.title }}</a>
+          <p class="text-xs text-gray-500">{{ deal.contact.name }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-semibold text-gray-900">${{ deal.value|floatformat:0 }}</p>
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+            {% if deal.stage == 'won' %}bg-green-100 text-green-800
+            {% elif deal.stage == 'lost' %}bg-red-100 text-red-800
+            {% else %}bg-indigo-100 text-indigo-800{% endif %}">
+            {{ deal.get_stage_display }}
+          </span>
+        </div>
+      </li>
+      {% empty %}
+      <li class="px-6 py-4 text-sm text-gray-400">No closed deals yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

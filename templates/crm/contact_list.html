@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Leads — CRM Tracker{% endblock %}
+{% block page_title %}Leads{% endblock %}
+{% block header_actions %}
+  <a href="{% url 'contact_create' %}" class="btn-primary">+ Add Lead</a>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="bg-white rounded-xl border border-gray-200 p-4 mb-5 flex flex-wrap gap-3">
+  <form method="get" class="flex flex-wrap gap-3 w-full">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search name, email, company..."
+      class="form-input flex-1 min-w-48">
+    <select name="status" class="form-input w-40">
+      <option value="">All statuses</option>
+      {% for val, label in status_choices %}
+      <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn-primary">Search</button>
+    {% if q or status %}<a href="{% url 'contact_list' %}" class="btn-secondary">Clear</a>{% endif %}
+  </form>
+</div>
+
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Closed Deals</th>
+        <th class="relative px-6 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for contact in contacts %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-6 py-4">
+          <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ contact.name }}</a>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
+        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.email|default:"—" }}</td>
+        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.phone|default:"—" }}</td>
+        <td class="px-6 py-4">
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+            {% if contact.status == 'customer' %}bg-green-100 text-green-800
+            {% elif contact.status == 'prospect' %}bg-blue-100 text-blue-800
+            {% elif contact.status == 'lead' %}bg-yellow-100 text-yellow-800
+            {% else %}bg-gray-100 text-gray-600{% endif %}">
+            {{ contact.get_status_display }}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.deals.count }}</td>
+        <td class="px-6 py-4 text-right text-sm">
+          <a href="{% url 'contact_edit' contact.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
+          <a href="{% url 'contact_delete' contact.pk %}" class="text-gray-400 hover:text-red-600">Delete</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-400">No leads found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

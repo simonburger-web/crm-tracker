@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — CRM Tracker{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+  <div class="bg-white rounded-xl border border-gray-200 p-6">
+    <form method="post" class="space-y-5">
+      {% csrf_token %}
+      {% for field in form %}
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Save Lead</button>
+        {% if contact %}
+        <a href="{% url 'contact_detail' contact.pk %}" class="btn-secondary">Cancel</a>
+        {% else %}
+        <a href="{% url 'contact_list' %}" class="btn-secondary">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
