@@ -5,13 +5,14 @@ from .models import Contact, Deal, Note
 class ContactForm(forms.ModelForm):
     class Meta:
         model = Contact
-        fields = ['name', 'email', 'phone', 'company', 'status']
+        fields = ['name', 'email', 'phone', 'company', 'status', 'region']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Full name'}),
             'email': forms.EmailInput(attrs={'class': 'form-input', 'placeholder': 'email@example.com'}),
             'phone': forms.TextInput(attrs={'class': 'form-input', 'placeholder': '+1 555 000 0000'}),
             'company': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Company name'}),
             'status': forms.Select(attrs={'class': 'form-input'}),
+            'region': forms.Select(attrs={'class': 'form-input'}),
         }
 
 

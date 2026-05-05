@@ -35,10 +35,8 @@ def contact_list(request):
     if status:
         contacts = contacts.filter(status=status)
     return render(request, 'crm/contact_list.html', {
-        # For now both sections share the same filtered queryset; split later once
-        # we add/derive a region field.
-        'us_contacts': contacts,
-        'sa_contacts': contacts,
+        'us_contacts': contacts.filter(region='us'),
+        'sa_contacts': contacts.filter(region='sa'),
         'q': q,
         'status': status,
         'status_choices': Contact.STATUS_CHOICES,
@@ -62,7 +60,11 @@ def contact_detail(request, pk):
 
 
 def contact_create(request):
-    form = ContactForm(request.POST or None)
+    initial = {}
+    region = request.GET.get('region')
+    if region in ('us', 'sa'):
+        initial['region'] = region
+    form = ContactForm(request.POST or None, initial=initial)
     if form.is_valid():
         contact = form.save()
         return redirect('contact_detail', pk=contact.pk)

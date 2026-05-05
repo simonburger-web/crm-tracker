@@ -3,7 +3,8 @@
 {% block title %}US leads — CRM Tracker{% endblock %}
 {% block page_title %}US leads{% endblock %}
 {% block header_actions %}
-  <a href="{% url 'contact_create' %}" class="btn-primary">+ Add Lead</a>
+  <a href="{% url 'contact_create' %}?region=us" class="btn-secondary">+ US Lead</a>
+  <a href="{% url 'contact_create' %}?region=sa" class="btn-primary">+ SA Lead</a>
 {% endblock %}
 
 {% block content %}
