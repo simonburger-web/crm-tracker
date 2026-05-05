@@ -35,7 +35,10 @@ def contact_list(request):
     if status:
         contacts = contacts.filter(status=status)
     return render(request, 'crm/contact_list.html', {
-        'contacts': contacts,
+        # For now both sections share the same filtered queryset; split later once
+        # we add/derive a region field.
+        'us_contacts': contacts,
+        'sa_contacts': contacts,
         'q': q,
         'status': status,
         'status_choices': Contact.STATUS_CHOICES,
