@@ -1,7 +1,8 @@
+from datetime import date, timedelta
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Q, Sum, Count
-from .models import Contact, Deal, Note
-from .forms import ContactForm, DealForm, NoteForm
+from .models import Contact, Deal, Note, Meeting
+from .forms import ContactForm, DealForm, NoteForm, MeetingForm
 
 
 def dashboard(request):
@@ -174,6 +175,47 @@ def deal_delete(request, pk):
         deal.delete()
         return redirect('deal_list')
     return render(request, 'crm/deal_confirm_delete.html', {'deal': deal})
+
+
+def calendar_view(request):
+    today = date.today()
+    days = [today + timedelta(days=i) for i in range(5)]
+    meetings = Meeting.objects.filter(
+        scheduled_at__date__gte=today,
+        scheduled_at__date__lte=today + timedelta(days=4),
+    ).select_related('contact')
+    day_meetings = {d: [] for d in days}
+    for m in meetings:
+        d = m.scheduled_at.date()
+        if d in day_meetings:
+            day_meetings[d].append(m)
+    day_data = [(d, day_meetings[d]) for d in days]
+    return render(request, 'crm/calendar.html', {'day_data': day_data, 'today': today})
+
+
+def meeting_create(request):
+    form = MeetingForm(request.POST or None)
+    if form.is_valid():
+        form.save()
+        return redirect('calendar')
+    return render(request, 'crm/meeting_form.html', {'form': form, 'title': 'Log Meeting'})
+
+
+def meeting_edit(request, pk):
+    meeting = get_object_or_404(Meeting, pk=pk)
+    form = MeetingForm(request.POST or None, instance=meeting)
+    if form.is_valid():
+        form.save()
+        return redirect('calendar')
+    return render(request, 'crm/meeting_form.html', {'form': form, 'title': 'Edit Meeting', 'meeting': meeting})
+
+
+def meeting_delete(request, pk):
+    meeting = get_object_or_404(Meeting, pk=pk)
+    if request.method == 'POST':
+        meeting.delete()
+        return redirect('calendar')
+    return render(request, 'crm/meeting_confirm_delete.html', {'meeting': meeting})
 
 
 def note_delete(request, pk):

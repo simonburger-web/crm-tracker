@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar – CRM Tracker{% endblock %}
+{% block page_title %}Calendar{% endblock %}
+
+{% block header_actions %}
+  <a href="{% url 'meeting_create' %}" class="btn-primary">+ Log Meeting</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-5 gap-4">
+  {% for day, meetings in day_data %}
+  <div class="bg-white rounded-lg border border-gray-200 flex flex-col min-h-64">
+    <!-- Day header -->
+    <div class="px-4 py-3 border-b border-gray-100 {% if day == today %}bg-indigo-600 rounded-t-lg{% endif %}">
+      <p class="text-xs font-medium {% if day == today %}text-indigo-100{% else %}text-gray-400{% endif %}">
+        {{ day|date:"D"|upper }}
+      </p>
+      <p class="text-2xl font-bold {% if day == today %}text-white{% else %}text-gray-800{% endif %}">
+        {{ day|date:"j" }}
+      </p>
+      <p class="text-xs {% if day == today %}text-indigo-200{% else %}text-gray-400{% endif %}">
+        {{ day|date:"M Y" }}
+      </p>
+    </div>
+
+    <!-- Meetings -->
+    <div class="flex-1 p-3 space-y-2">
+      {% for meeting in meetings %}
+      <div class="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative">
+        <p class="font-semibold text-indigo-800 truncate">{{ meeting.title }}</p>
+        <p class="text-indigo-600">{{ meeting.scheduled_at|date:"H:i" }}</p>
+        <p class="text-gray-500 truncate">{{ meeting.contact.name }}</p>
+
+        {% if meeting.meeting_type == 'call' %}
+          <span class="inline-block mt-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs">Call</span>
+        {% elif meeting.meeting_type == 'video' %}
+          <span class="inline-block mt-1 rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-xs">Video</span>
+        {% elif meeting.meeting_type == 'in_person' %}
+          <span class="inline-block mt-1 rounded-full bg-purple-100 text-purple-700 px-2 py-0.5 text-xs">In Person</span>
+        {% elif meeting.meeting_type == 'email' %}
+          <span class="inline-block mt-1 rounded-full bg-yellow-100 text-yellow-700 px-2 py-0.5 text-xs">Email</span>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
+          <a href="{% url 'meeting_edit' meeting.pk %}" class="text-gray-400 hover:text-indigo-600" title="Edit">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
+          </a>
+          <a href="{% url 'meeting_delete' meeting.pk %}" class="text-gray-400 hover:text-red-500" title="Delete">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </a>
+        </div>
+      </div>
+      {% empty %}
+      <p class="text-xs text-gray-300 text-center pt-4">No meetings</p>
+      {% endfor %}
+    </div>
+
+    <!-- Add button -->
+    <div class="px-3 pb-3">
+      <a href="{% url 'meeting_create' %}?date={{ day|date:'Y-m-d' }}" class="block text-center text-xs text-indigo-400 hover:text-indigo-600 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1.5 transition">
+        + Add
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

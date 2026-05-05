@@ -58,6 +58,28 @@ class Deal(models.Model):
         return self.title
 
 
+class Meeting(models.Model):
+    MEETING_TYPE_CHOICES = [
+        ('call', 'Call'),
+        ('video', 'Video Call'),
+        ('in_person', 'In Person'),
+        ('email', 'Email'),
+    ]
+
+    title = models.CharField(max_length=200)
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='meetings')
+    meeting_type = models.CharField(max_length=20, choices=MEETING_TYPE_CHOICES, default='call')
+    scheduled_at = models.DateTimeField()
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['scheduled_at']
+
+    def __str__(self):
+        return f"{self.title} – {self.contact.name}"
+
+
 class Note(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)
     deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)

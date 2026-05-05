@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} – CRM Tracker{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block header_actions %}
+  <a href="{% url 'calendar' %}" class="btn-secondary">Cancel</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-lg bg-white rounded-lg border border-gray-200 p-6">
+  <form method="post" class="space-y-5">
+    {% csrf_token %}
+    {% for field in form %}
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}
+        <p class="mt-1 text-xs text-red-500">{{ field.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="flex gap-3 pt-2">
+      <button type="submit" class="btn-primary">Save Meeting</button>
+      <a href="{% url 'calendar' %}" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
