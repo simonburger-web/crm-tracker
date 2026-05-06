@@ -6,6 +6,7 @@ urlpatterns = [
     path('contacts/', views.contact_list, name='contact_list'),
     path('contacts/us/', views.us_leads, name='us_leads'),
     path('contacts/sa/', views.sa_leads, name='sa_leads'),
+    path('contacts/inactive/', views.inactive_leads, name='inactive_leads'),
     path('contacts/new/', views.contact_create, name='contact_create'),
     path('contacts/<int:pk>/', views.contact_detail, name='contact_detail'),
     path('contacts/<int:pk>/edit/', views.contact_edit, name='contact_edit'),

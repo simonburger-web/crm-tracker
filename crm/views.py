@@ -50,12 +50,12 @@ def contact_list(request):
 
 
 def us_leads(request):
-    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='us'))
+    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='us').exclude(status='inactive'))
     return render(request, 'crm/region_leads.html', {
         'contacts': contacts,
         'q': q,
         'status': status,
-        'status_choices': Contact.STATUS_CHOICES,
+        'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
         'region': 'us',
         'region_label': 'US Leads',
         'clear_url': 'us_leads',
@@ -63,15 +63,23 @@ def us_leads(request):
 
 
 def sa_leads(request):
-    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa'))
+    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa').exclude(status='inactive'))
     return render(request, 'crm/region_leads.html', {
         'contacts': contacts,
         'q': q,
         'status': status,
-        'status_choices': Contact.STATUS_CHOICES,
+        'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
         'region': 'sa',
         'region_label': 'SA Leads',
         'clear_url': 'sa_leads',
+    })
+
+
+def inactive_leads(request):
+    contacts, q, _ = _filter_contacts(request, Contact.objects.filter(status='inactive'))
+    return render(request, 'crm/inactive_leads.html', {
+        'contacts': contacts,
+        'q': q,
     })
 
 
