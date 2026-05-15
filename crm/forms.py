@@ -58,3 +58,29 @@ class NoteForm(forms.ModelForm):
         widgets = {
             'body': forms.Textarea(attrs={'class': 'form-input', 'rows': 3, 'placeholder': 'Add a note...'}),
         }
+
+
+class LeadsGeneratorForm(forms.Form):
+    keyword = forms.CharField(
+        required=True,
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. plumbing, dentist, auto repair'}),
+        label='Keyword / Category',
+    )
+    state = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. CA'}),
+        label='State (optional)',
+    )
+    city = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. San Diego'}),
+        label='City (optional)',
+    )
+    max_results = forms.IntegerField(
+        required=False,
+        initial=25,
+        min_value=1,
+        max_value=500,
+        widget=forms.NumberInput(attrs={'class': 'form-input'}),
+        label='Max Results',
+    )

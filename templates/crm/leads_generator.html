@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Leads Generator{% endblock %}
+{% block page_title %}Leads Generator{% endblock %}
+
+{% block content %}
+  <div class="max-w-5xl space-y-6">
+    {% if imported_count != None %}
+      <div class="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+        Imported {{ imported_count }} leads into US Leads.
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <div class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <div class="rounded-md border border-gray-200 bg-white p-6">
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="search" />
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ form.keyword.label }}</label>
+            {{ form.keyword }}
+            {% if form.keyword.errors %}<p class="text-sm text-red-600 mt-1">{{ form.keyword.errors|striptags }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ form.state.label }}</label>
+            {{ form.state }}
+            {% if form.state.errors %}<p class="text-sm text-red-600 mt-1">{{ form.state.errors|striptags }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ form.city.label }}</label>
+            {{ form.city }}
+            {% if form.city.errors %}<p class="text-sm text-red-600 mt-1">{{ form.city.errors|striptags }}</p>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ form.max_results.label }}</label>
+            {{ form.max_results }}
+            {% if form.max_results.errors %}<p class="text-sm text-red-600 mt-1">{{ form.max_results.errors|striptags }}</p>{% endif %}
+          </div>
+
+          <div class="md:col-span-2 flex gap-3">
+            <button type="submit" class="btn-primary">Generate Leads</button>
+            <div class="text-sm text-gray-600 self-center">
+              {% if token_configured %}
+                API token configured.
+              {% else %}
+                API token not configured (set <span class="font-mono">LEADS_GENERATOR_API_TOKEN</span>).
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="rounded-md border border-gray-200 bg-white p-6">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-900">Results</h2>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="import" />
+          <button type="submit" class="btn-secondary" {% if not results %}disabled{% endif %}>Import As US Leads</button>
+        </form>
+      </div>
+
+      {% if not results %}
+        <p class="mt-4 text-sm text-gray-600">No results yet.</p>
+      {% else %}
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-gray-500 border-b">
+                <th class="py-2 pr-4">Business</th>
+                <th class="py-2 pr-4">Phone</th>
+                <th class="py-2 pr-4">Website</th>
+                <th class="py-2 pr-4">Address</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              {% for r in results %}
+                <tr>
+                  <td class="py-2 pr-4 font-medium text-gray-900">{{ r.name }}</td>
+                  <td class="py-2 pr-4 text-gray-700">{{ r.phone }}</td>
+                  <td class="py-2 pr-4 text-gray-700">
+                    {% if r.website %}{{ r.website }}{% else %}<span class="text-gray-400">None</span>{% endif %}
+                  </td>
+                  <td class="py-2 pr-4 text-gray-700">{{ r.address }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
+

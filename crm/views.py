@@ -1,8 +1,32 @@
 from datetime import date, timedelta
+import os
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Q, Sum, Count
 from .models import Contact, Deal, Note, Meeting
-from .forms import ContactForm, DealForm, NoteForm, MeetingForm
+from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
+
+
+def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max_results: int = 25):
+    """
+    Fetch businesses matching filters, ideally restricted to "no website".
+
+    This is intentionally implemented as a provider hook. You need to decide which
+    provider/API this project uses (the token must NOT be committed).
+
+    Expected return format: list[dict] with keys:
+      - name (str)
+      - phone (str|None)
+      - website (str|None)  (should be None/'' for "no website")
+      - address (str|None)
+      - source_id (str|None) (provider id)
+    """
+    token = os.environ.get('LEADS_GENERATOR_API_TOKEN', '').strip()
+    if not token:
+        raise RuntimeError('LEADS_GENERATOR_API_TOKEN is not set')
+
+    # Provider-specific implementation goes here.
+    # Once you confirm the provider, we can implement the API call and parsing.
+    raise NotImplementedError('Leads generator provider is not configured yet')
 
 
 def dashboard(request):
@@ -236,3 +260,76 @@ def note_delete(request, pk):
             return redirect('contact_detail', pk=contact_pk)
         return redirect('deal_detail', pk=deal_pk)
     return render(request, 'crm/note_confirm_delete.html', {'note': note})
+
+
+def leads_generator(request):
+    """
+    Leads Generator: scrape/fetch US businesses with no websites, then import as US leads.
+    """
+    session_key = 'leads_generator_last_results'
+    results = request.session.get(session_key) or []
+    error = None
+    imported_count = None
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'search')
+        if action == 'import':
+            to_import = request.session.get(session_key) or []
+            created = 0
+            for r in to_import:
+                name = (r.get('name') or '').strip()
+                if not name:
+                    continue
+                phone = (r.get('phone') or '').strip()
+                company = (r.get('company') or '').strip()
+                if not company:
+                    company = name
+                Contact.objects.create(
+                    name=name,
+                    phone=phone,
+                    company=company,
+                    region='us',
+                    status='lead',
+                )
+                created += 1
+            imported_count = created
+            request.session[session_key] = []
+            results = []
+            form = LeadsGeneratorForm()
+        else:
+            form = LeadsGeneratorForm(request.POST)
+            if form.is_valid():
+                cd = form.cleaned_data
+                try:
+                    fetched = _leads_generator_fetch(
+                        keyword=cd['keyword'],
+                        state=cd.get('state') or '',
+                        city=cd.get('city') or '',
+                        max_results=cd.get('max_results') or 25,
+                    )
+                    # Defensive normalization for the template/session
+                    results = []
+                    for r in fetched[: (cd.get('max_results') or 25)]:
+                        results.append({
+                            'name': (r.get('name') or '').strip(),
+                            'company': (r.get('company') or r.get('name') or '').strip(),
+                            'phone': (r.get('phone') or '').strip(),
+                            'website': (r.get('website') or '').strip(),
+                            'address': (r.get('address') or '').strip(),
+                            'source_id': (r.get('source_id') or '').strip(),
+                        })
+                    request.session[session_key] = results
+                except Exception as e:
+                    error = str(e)
+            else:
+                error = 'Please fix the form errors.'
+    else:
+        form = LeadsGeneratorForm()
+
+    return render(request, 'crm/leads_generator.html', {
+        'form': form,
+        'results': results,
+        'error': error,
+        'imported_count': imported_count,
+        'token_configured': bool(os.environ.get('LEADS_GENERATOR_API_TOKEN', '').strip()),
+    })
