@@ -1,5 +1,8 @@
 from datetime import date, timedelta
 import os
+import json
+import urllib.parse
+import urllib.request
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Q, Sum, Count
 from .models import Contact, Deal, Note, Meeting
@@ -24,9 +27,57 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
     if not token:
         raise RuntimeError('LEADS_GENERATOR_API_TOKEN is not set')
 
-    # Provider-specific implementation goes here.
-    # Once you confirm the provider, we can implement the API call and parsing.
-    raise NotImplementedError('Leads generator provider is not configured yet')
+    q_parts = [keyword.strip()]
+    if city.strip():
+        q_parts.append(city.strip())
+    if state.strip():
+        q_parts.append(state.strip())
+    q_parts.append('United States')
+    query = ' '.join([p for p in q_parts if p])
+
+    # SerpApi Google Maps Local Results API:
+    # https://serpapi.com/search?engine=google_maps&type=search&q=...
+    params = {
+        'engine': 'google_maps',
+        'type': 'search',
+        'q': query,
+        'hl': 'en',
+        'gl': 'us',
+        'api_key': token,
+    }
+    url = 'https://serpapi.com/search.json?' + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={'User-Agent': 'crmtracker/1.0'})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        body = resp.read().decode('utf-8', errors='replace')
+    data = json.loads(body)
+
+    local_results = data.get('local_results') or []
+    out = []
+    seen = set()
+    for r in local_results:
+        website = (r.get('website') or '').strip()
+        if website:
+            continue  # we only want "no website" leads
+
+        source_id = str(r.get('data_id') or r.get('place_id') or r.get('data_cid') or '').strip()
+        if source_id and source_id in seen:
+            continue
+        if source_id:
+            seen.add(source_id)
+
+        title = (r.get('title') or '').strip()
+        out.append({
+            'name': title,
+            'company': title,
+            'phone': (r.get('phone') or '').strip(),
+            'website': website,
+            'address': (r.get('address') or '').strip(),
+            'source_id': source_id,
+        })
+        if len(out) >= max_results:
+            break
+
+    return out
 
 
 def dashboard(request):
@@ -284,14 +335,21 @@ def leads_generator(request):
                 company = (r.get('company') or '').strip()
                 if not company:
                     company = name
-                Contact.objects.create(
+                exists = Contact.objects.filter(
                     name=name,
                     phone=phone,
                     company=company,
                     region='us',
-                    status='lead',
-                )
-                created += 1
+                ).exists()
+                if not exists:
+                    Contact.objects.create(
+                        name=name,
+                        phone=phone,
+                        company=company,
+                        region='us',
+                        status='lead',
+                    )
+                    created += 1
             imported_count = created
             request.session[session_key] = []
             results = []
