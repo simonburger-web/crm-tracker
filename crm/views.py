@@ -35,47 +35,76 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
     q_parts.append('United States')
     query = ' '.join([p for p in q_parts if p])
 
-    # SerpApi Google Maps Local Results API:
-    # https://serpapi.com/search?engine=google_maps&type=search&q=...
-    params = {
-        'engine': 'google_maps',
-        'type': 'search',
-        'q': query,
-        'hl': 'en',
-        'gl': 'us',
-        'api_key': token,
-    }
-    url = 'https://serpapi.com/search.json?' + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={'User-Agent': 'crmtracker/1.0'})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        body = resp.read().decode('utf-8', errors='replace')
-    data = json.loads(body)
-
-    local_results = data.get('local_results') or []
     out = []
     seen = set()
-    for r in local_results:
-        website = (r.get('website') or '').strip()
-        if website:
-            continue  # we only want "no website" leads
 
-        source_id = str(r.get('data_id') or r.get('place_id') or r.get('data_cid') or '').strip()
-        if source_id and source_id in seen:
-            continue
-        if source_id:
-            seen.add(source_id)
+    def _extract_website(result: dict) -> str:
+        # SerpApi can put website at top-level or under links.website
+        w = (result.get('website') or '').strip()
+        if w:
+            return w
+        links = result.get('links') or {}
+        if isinstance(links, dict):
+            w2 = (links.get('website') or '').strip()
+            if w2:
+                return w2
+        return ''
 
-        title = (r.get('title') or '').strip()
-        out.append({
-            'name': title,
-            'company': title,
-            'phone': (r.get('phone') or '').strip(),
-            'website': website,
-            'address': (r.get('address') or '').strip(),
-            'source_id': source_id,
-        })
+    # SerpApi Google Maps Local Results API:
+    # https://serpapi.com/search?engine=google_maps&type=search&q=...
+    # We paginate with start=0,20,40,... because "no website" listings often appear deeper.
+    for start in (0, 20, 40, 60, 80, 100):
         if len(out) >= max_results:
             break
+
+        params = {
+            'engine': 'google_maps',
+            'type': 'search',
+            'q': query,
+            'hl': 'en',
+            'gl': 'us',
+            'google_domain': 'google.com',
+            'api_key': token,
+            'start': start,
+            'no_cache': 'true',
+        }
+        url = 'https://serpapi.com/search.json?' + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers={'User-Agent': 'crmtracker/1.0'})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = resp.read().decode('utf-8', errors='replace')
+        data = json.loads(body)
+        local_results = data.get('local_results') or []
+
+        # If pagination isn't supported for this query without ll, SerpApi may return empty pages.
+        # Don't fail; just stop early.
+        if start > 0 and not local_results:
+            break
+
+        for r in local_results:
+            if len(out) >= max_results:
+                break
+
+            website = _extract_website(r)
+            if website:
+                continue  # we only want "no website" leads
+
+            source_id = str(r.get('data_id') or r.get('place_id') or r.get('data_cid') or '').strip()
+            if source_id and source_id in seen:
+                continue
+            if source_id:
+                seen.add(source_id)
+
+            title = (r.get('title') or '').strip()
+            if not title:
+                continue
+            out.append({
+                'name': title,
+                'company': title,
+                'phone': (r.get('phone') or '').strip(),
+                'website': '',
+                'address': (r.get('address') or '').strip(),
+                'source_id': source_id,
+            })
 
     return out
 
