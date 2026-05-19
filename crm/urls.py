@@ -22,4 +22,6 @@ urlpatterns = [
     path('meetings/<int:pk>/edit/', views.meeting_edit, name='meeting_edit'),
     path('meetings/<int:pk>/delete/', views.meeting_delete, name='meeting_delete'),
     path('leads/generator/', views.leads_generator, name='leads_generator'),
+    path('todo/new/', views.todo_block_create, name='todo_block_create'),
+    path('todo/<int:pk>/delete/', views.todo_block_delete, name='todo_block_delete'),
 ]

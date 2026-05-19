@@ -8,8 +8,9 @@
 {% endblock %}
 
 {% block content %}
+<!-- ── Calendar section ─────────────────────────────────────────────── -->
 <div class="grid grid-cols-5 gap-4">
-  {% for day, meetings in day_data %}
+  {% for day, meetings, todos in day_data %}
   <div class="bg-white rounded-lg border border-gray-200 flex flex-col min-h-64">
     <!-- Day header -->
     <div class="px-4 py-3 border-b border-gray-100 {% if day == today %}bg-indigo-600 rounded-t-lg{% endif %}">
@@ -66,4 +67,356 @@
   </div>
   {% endfor %}
 </div>
+
+<!-- ── Todo Schedule section ────────────────────────────────────────── -->
+<h2 class="text-lg font-semibold text-gray-700 mt-8 mb-3">Todo Schedule</h2>
+<div class="grid grid-cols-5 gap-4" id="todo-grid">
+  {% for day, meetings, todos in day_data %}
+  <div class="bg-white rounded-lg border border-gray-200 flex flex-col min-h-64" data-date="{{ day|date:'Y-m-d' }}">
+    <!-- Day header (identical style) -->
+    <div class="px-4 py-3 border-b border-gray-100 {% if day == today %}bg-indigo-600 rounded-t-lg{% endif %}">
+      <p class="text-xs font-medium {% if day == today %}text-indigo-100{% else %}text-gray-400{% endif %}">
+        {{ day|date:"D"|upper }}
+      </p>
+      <p class="text-2xl font-bold {% if day == today %}text-white{% else %}text-gray-800{% endif %}">
+        {{ day|date:"j" }}
+      </p>
+      <p class="text-xs {% if day == today %}text-indigo-200{% else %}text-gray-400{% endif %}">
+        {{ day|date:"M Y" }}
+      </p>
+    </div>
+
+    <!-- Todo blocks -->
+    <div class="flex-1 p-3 space-y-1.5 todo-blocks-list">
+      {% for block in todos %}
+      <div class="todo-block rounded-md px-3 py-1.5 text-xs group relative
+        {% if block.color == 'blue' %}bg-blue-50 border border-blue-100
+        {% elif block.color == 'green' %}bg-green-50 border border-green-100
+        {% elif block.color == 'orange' %}bg-orange-50 border border-orange-100
+        {% elif block.color == 'purple' %}bg-purple-50 border border-purple-100
+        {% elif block.color == 'red' %}bg-red-50 border border-red-100
+        {% elif block.color == 'yellow' %}bg-yellow-50 border border-yellow-100
+        {% endif %}"
+        data-id="{{ block.pk }}">
+        <p class="font-semibold truncate
+          {% if block.color == 'blue' %}text-blue-800
+          {% elif block.color == 'green' %}text-green-800
+          {% elif block.color == 'orange' %}text-orange-800
+          {% elif block.color == 'purple' %}text-purple-800
+          {% elif block.color == 'red' %}text-red-800
+          {% elif block.color == 'yellow' %}text-yellow-800
+          {% endif %}">{{ block.title }}</p>
+        <p class="text-gray-400">{{ block.start_time|time:"H:i" }} – {{ block.end_time|time:"H:i" }}</p>
+        <button class="todo-delete-btn absolute top-1.5 right-1.5 hidden group-hover:block text-gray-300 hover:text-red-500" data-id="{{ block.pk }}" title="Delete">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      {% empty %}
+      <p class="text-xs text-gray-300 text-center pt-4 empty-msg">No tasks</p>
+      {% endfor %}
+    </div>
+
+    <!-- Quick-add form -->
+    <div class="px-3 pb-3">
+      <button class="todo-add-btn block w-full text-center text-xs text-indigo-400 hover:text-indigo-600 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1.5 transition" data-date="{{ day|date:'Y-m-d' }}">
+        + Add
+      </button>
+      <!-- Inline form (hidden by default) -->
+      <div class="todo-form hidden mt-2 space-y-1.5" data-date="{{ day|date:'Y-m-d' }}">
+        <!-- Task label + presets -->
+        <input type="text" placeholder="Task name…" class="todo-title-input w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-400" maxlength="60">
+        <div class="flex flex-wrap gap-1">
+          <button class="preset-chip text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition">Calls</button>
+          <button class="preset-chip text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition">Admin</button>
+          <button class="preset-chip text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition">Follow-ups</button>
+          <button class="preset-chip text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition">Research</button>
+          <button class="preset-chip text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition">Break</button>
+          <button class="preset-chip text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition">Email</button>
+        </div>
+        <!-- Time row -->
+        <div class="flex gap-1 items-center">
+          <select class="todo-start-select flex-1 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:border-indigo-400"></select>
+          <span class="text-gray-300 text-xs">–</span>
+          <select class="todo-end-select flex-1 border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:border-indigo-400"></select>
+        </div>
+        <!-- Duration quick-pick -->
+        <div class="flex gap-1">
+          <button class="dur-btn text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition" data-min="30">30m</button>
+          <button class="dur-btn text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition" data-min="60">1h</button>
+          <button class="dur-btn text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition" data-min="90">1.5h</button>
+          <button class="dur-btn text-xs bg-gray-100 hover:bg-indigo-100 hover:text-indigo-700 rounded px-1.5 py-0.5 transition" data-min="120">2h</button>
+        </div>
+        <!-- Color picker -->
+        <div class="flex gap-1.5 items-center">
+          <span class="text-xs text-gray-400">Color:</span>
+          <button class="color-dot w-4 h-4 rounded-full border-2 border-transparent hover:scale-110 transition" data-color="blue"   style="background:#3b82f6;" title="Blue"></button>
+          <button class="color-dot w-4 h-4 rounded-full border-2 border-transparent hover:scale-110 transition" data-color="green"  style="background:#22c55e;" title="Green"></button>
+          <button class="color-dot w-4 h-4 rounded-full border-2 border-transparent hover:scale-110 transition" data-color="orange" style="background:#f97316;" title="Orange"></button>
+          <button class="color-dot w-4 h-4 rounded-full border-2 border-transparent hover:scale-110 transition" data-color="purple" style="background:#a855f7;" title="Purple"></button>
+          <button class="color-dot w-4 h-4 rounded-full border-2 border-transparent hover:scale-110 transition" data-color="red"    style="background:#ef4444;" title="Red"></button>
+          <button class="color-dot w-4 h-4 rounded-full border-2 border-transparent hover:scale-110 transition" data-color="yellow" style="background:#eab308;" title="Yellow"></button>
+        </div>
+        <!-- Error msg -->
+        <p class="todo-error text-xs text-red-500 hidden"></p>
+        <!-- Actions -->
+        <div class="flex gap-1.5">
+          <button class="todo-save-btn flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded py-1 transition">Save</button>
+          <button class="todo-cancel-btn text-xs text-gray-400 hover:text-gray-600 px-2">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Pass meeting times to JS for conflict checking -->
+<script>
+const MEETING_TIMES = {{ meeting_times_json|safe }};
+const TODO_CREATE_URL = "{% url 'todo_block_create' %}";
+const TODO_DELETE_URL_TPL = "{% url 'todo_block_delete' 0 %}".replace('/0/', '/__PK__/').replace('/0/', '/__PK__/');
+const CSRF_TOKEN = "{{ csrf_token }}";
+
+// ── Time slot helpers ────────────────────────────────────────────────
+function buildTimeOptions(selectEl, blockedStarts) {
+  selectEl.innerHTML = '';
+  for (let h = 6; h < 23; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const hh = String(h).padStart(2, '0');
+      const mm = String(m).padStart(2, '0');
+      const val = `${hh}:${mm}`;
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val;
+      if (blockedStarts && blockedStarts.includes(val)) {
+        opt.disabled = true;
+        opt.textContent = `${val} ✕`;
+      }
+      selectEl.appendChild(opt);
+    }
+  }
+}
+
+function timeToMinutes(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+// Given meeting times for a day, compute all 15-min slots that are blocked
+// (within 30 min of a meeting start)
+function blockedSlots(meetingTimes) {
+  const blocked = new Set();
+  for (const mt of meetingTimes) {
+    const base = timeToMinutes(mt);
+    for (let offset = 0; offset < 30; offset += 15) {
+      const slot = minutesToTime(base + offset);
+      blocked.add(slot);
+    }
+  }
+  return [...blocked];
+}
+
+// ── Color hex map ────────────────────────────────────────────────────
+const COLOR_HEX = {
+  blue: '#3b82f6', green: '#22c55e', orange: '#f97316',
+  purple: '#a855f7', red: '#ef4444', yellow: '#eab308',
+};
+const COLOR_BG = {
+  blue:   ['#eff6ff','#bfdbfe','#1e40af'],
+  green:  ['#f0fdf4','#bbf7d0','#166534'],
+  orange: ['#fff7ed','#fed7aa','#9a3412'],
+  purple: ['#faf5ff','#e9d5ff','#6b21a8'],
+  red:    ['#fef2f2','#fecaca','#991b1b'],
+  yellow: ['#fefce8','#fef08a','#854d0e'],
+};
+
+// ── Init each todo column ────────────────────────────────────────────
+document.querySelectorAll('#todo-grid [data-date]').forEach(col => {
+  const date = col.dataset.date;
+  const meetingTimes = MEETING_TIMES[date] || [];
+  const blocked = blockedSlots(meetingTimes);
+
+  const addBtn    = col.querySelector('.todo-add-btn');
+  const form      = col.querySelector('.todo-form');
+  const titleIn   = col.querySelector('.todo-title-input');
+  const startSel  = col.querySelector('.todo-start-select');
+  const endSel    = col.querySelector('.todo-end-select');
+  const saveBtn   = col.querySelector('.todo-save-btn');
+  const cancelBtn = col.querySelector('.todo-cancel-btn');
+  const errorEl   = col.querySelector('.todo-error');
+  const blocksList = col.querySelector('.todo-blocks-list');
+
+  let selectedColor = 'blue';
+
+  // Build time dropdowns
+  buildTimeOptions(startSel, blocked);
+  buildTimeOptions(endSel, null);
+
+  // Default start to next 15-min boundary from now (if today) or 09:00
+  const isToday = date === new Date().toISOString().slice(0,10);
+  if (isToday) {
+    const now = new Date();
+    const mins = Math.ceil((now.getHours()*60 + now.getMinutes()) / 15) * 15;
+    const slot = minutesToTime(Math.min(mins, 22*60));
+    startSel.value = slot;
+    endSel.value = minutesToTime(Math.min(mins + 60, 22*60+45));
+  } else {
+    startSel.value = '09:00';
+    endSel.value = '10:00';
+  }
+
+  // Color dots
+  col.querySelectorAll('.color-dot').forEach(dot => {
+    dot.style.background = COLOR_HEX[dot.dataset.color] || dot.style.background;
+    dot.addEventListener('click', () => {
+      col.querySelectorAll('.color-dot').forEach(d => d.style.borderColor = 'transparent');
+      dot.style.borderColor = '#6366f1';
+      selectedColor = dot.dataset.color;
+    });
+  });
+  // Select blue by default
+  const firstDot = col.querySelector('.color-dot[data-color="blue"]');
+  if (firstDot) firstDot.style.borderColor = '#6366f1';
+
+  // Preset chips
+  col.querySelectorAll('.preset-chip').forEach(chip => {
+    chip.addEventListener('click', () => { titleIn.value = chip.textContent; titleIn.focus(); });
+  });
+
+  // Duration buttons: set end relative to start
+  col.querySelectorAll('.dur-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const startMins = timeToMinutes(startSel.value);
+      const endMins = startMins + parseInt(btn.dataset.min);
+      const target = minutesToTime(Math.min(endMins, 23*60));
+      endSel.value = target;
+    });
+  });
+
+  // Open form
+  addBtn.addEventListener('click', () => {
+    addBtn.classList.add('hidden');
+    form.classList.remove('hidden');
+    titleIn.focus();
+  });
+
+  // Close form
+  cancelBtn.addEventListener('click', () => {
+    form.classList.add('hidden');
+    addBtn.classList.remove('hidden');
+    errorEl.classList.add('hidden');
+    errorEl.textContent = '';
+  });
+
+  // Save
+  saveBtn.addEventListener('click', async () => {
+    const title = titleIn.value.trim();
+    const start = startSel.value;
+    const end = endSel.value;
+
+    if (!title) { showError('Enter a task name.'); return; }
+    if (timeToMinutes(end) <= timeToMinutes(start)) { showError('End must be after start.'); return; }
+
+    // Client-side conflict check
+    const startMins = timeToMinutes(start);
+    for (const mt of meetingTimes) {
+      const mtMins = timeToMinutes(mt.slice(0,5));
+      if (startMins >= mtMins && startMins < mtMins + 30) {
+        showError(`Blocked: meeting at ${mt} (30 min buffer).`);
+        return;
+      }
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      const resp = await fetch(TODO_CREATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+        body: JSON.stringify({ date, start_time: start, end_time: end, title, color: selectedColor }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { showError(data.error || 'Error saving.'); return; }
+
+      // Append block to list
+      appendBlock(data);
+      titleIn.value = '';
+      errorEl.classList.add('hidden');
+      form.classList.add('hidden');
+      addBtn.classList.remove('hidden');
+
+      // Update start dropdown for next block (after end time)
+      startSel.value = data.end_time;
+      endSel.value = minutesToTime(Math.min(timeToMinutes(data.end_time) + 60, 23*60));
+
+    } catch(e) {
+      showError('Network error.');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  });
+
+  // Allow Enter key to save
+  titleIn.addEventListener('keydown', e => { if (e.key === 'Enter') saveBtn.click(); });
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.classList.remove('hidden');
+  }
+
+  function appendBlock(block) {
+    // Remove "No tasks" placeholder if present
+    const empty = blocksList.querySelector('.empty-msg');
+    if (empty) empty.remove();
+
+    const [bg, border, text] = COLOR_BG[block.color] || COLOR_BG.blue;
+    const div = document.createElement('div');
+    div.className = 'todo-block rounded-md px-3 py-1.5 text-xs group relative';
+    div.style.cssText = `background:${bg};border:1px solid ${border};`;
+    div.dataset.id = block.id;
+    div.innerHTML = `
+      <p class="font-semibold truncate" style="color:${text}">${escHtml(block.title)}</p>
+      <p class="text-gray-400">${block.start_time} – ${block.end_time}</p>
+      <button class="todo-delete-btn absolute top-1.5 right-1.5 hidden group-hover:block text-gray-300 hover:text-red-500" data-id="${block.id}" title="Delete">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>`;
+    blocksList.appendChild(div);
+    bindDelete(div.querySelector('.todo-delete-btn'));
+  }
+
+  // Bind delete on existing blocks
+  blocksList.querySelectorAll('.todo-delete-btn').forEach(bindDelete);
+
+  function bindDelete(btn) {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const url = TODO_DELETE_URL_TPL.replace('__PK__', id);
+      try {
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': CSRF_TOKEN },
+        });
+        const block = blocksList.querySelector(`[data-id="${id}"]`);
+        if (block) block.remove();
+        if (!blocksList.querySelector('.todo-block')) {
+          const p = document.createElement('p');
+          p.className = 'text-xs text-gray-300 text-center pt-4 empty-msg';
+          p.textContent = 'No tasks';
+          blocksList.appendChild(p);
+        }
+      } catch(e) {}
+    });
+  }
+});
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 {% endblock %}

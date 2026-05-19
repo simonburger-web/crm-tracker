@@ -1,11 +1,12 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import os
 import json
 import urllib.parse
 import urllib.request
+from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Q, Sum, Count
-from .models import Contact, Deal, Note, Meeting
+from .models import Contact, Deal, Note, Meeting, TodoBlock
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
 
 
@@ -301,8 +302,26 @@ def calendar_view(request):
         d = m.scheduled_at.date()
         if d in day_meetings:
             day_meetings[d].append(m)
-    day_data = [(d, day_meetings[d]) for d in days]
-    return render(request, 'crm/calendar.html', {'day_data': day_data, 'today': today})
+
+    todo_blocks = TodoBlock.objects.filter(date__gte=today, date__lte=today + timedelta(days=4))
+    day_todos = {d: [] for d in days}
+    for tb in todo_blocks:
+        if tb.date in day_todos:
+            day_todos[tb.date].append(tb)
+
+    # Build meeting times per day as JSON for conflict checking in JS
+    meeting_times_by_day = {}
+    for d in days:
+        meeting_times_by_day[d.isoformat()] = [
+            m.scheduled_at.strftime('%H:%M') for m in day_meetings[d]
+        ]
+
+    day_data = [(d, day_meetings[d], day_todos[d]) for d in days]
+    return render(request, 'crm/calendar.html', {
+        'day_data': day_data,
+        'today': today,
+        'meeting_times_json': json.dumps(meeting_times_by_day),
+    })
 
 
 def meeting_create(request):
@@ -328,6 +347,60 @@ def meeting_delete(request, pk):
         meeting.delete()
         return redirect('calendar')
     return render(request, 'crm/meeting_confirm_delete.html', {'meeting': meeting})
+
+
+def todo_block_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = json.loads(request.body)
+    date_str = data.get('date')
+    start_str = data.get('start_time')
+    end_str = data.get('end_time')
+    title = (data.get('title') or '').strip()
+    color = data.get('color', 'blue')
+
+    if not all([date_str, start_str, end_str, title]):
+        return JsonResponse({'error': 'Missing fields'}, status=400)
+
+    block_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    start_t = datetime.strptime(start_str, '%H:%M').time()
+    end_t = datetime.strptime(end_str, '%H:%M').time()
+
+    if end_t <= start_t:
+        return JsonResponse({'error': 'End time must be after start time'}, status=400)
+
+    # Check meeting conflicts: cannot start within 30 min of any meeting start on that day
+    for m in Meeting.objects.filter(scheduled_at__date=block_date):
+        meeting_start = m.scheduled_at.time().replace(second=0, microsecond=0)
+        m_start_dt = datetime.combine(block_date, meeting_start)
+        s_start_dt = datetime.combine(block_date, start_t)
+        if m_start_dt <= s_start_dt < m_start_dt + timedelta(minutes=30):
+            return JsonResponse({
+                'error': f'Blocked: meeting "{m.title}" at {meeting_start.strftime("%H:%M")} (30 min buffer)'
+            }, status=400)
+
+    valid_colors = [c[0] for c in TodoBlock.COLOR_CHOICES]
+    if color not in valid_colors:
+        color = 'blue'
+
+    block = TodoBlock.objects.create(
+        date=block_date, start_time=start_t, end_time=end_t, title=title, color=color
+    )
+    return JsonResponse({
+        'id': block.pk,
+        'title': block.title,
+        'start_time': block.start_time.strftime('%H:%M'),
+        'end_time': block.end_time.strftime('%H:%M'),
+        'color': block.color,
+    })
+
+
+def todo_block_delete(request, pk):
+    block = get_object_or_404(TodoBlock, pk=pk)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    block.delete()
+    return JsonResponse({'ok': True})
 
 
 def note_delete(request, pk):

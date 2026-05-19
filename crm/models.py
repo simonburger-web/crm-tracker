@@ -80,6 +80,29 @@ class Meeting(models.Model):
         return f"{self.title} – {self.contact.name}"
 
 
+class TodoBlock(models.Model):
+    COLOR_CHOICES = [
+        ('blue', 'Blue'),
+        ('green', 'Green'),
+        ('orange', 'Orange'),
+        ('purple', 'Purple'),
+        ('red', 'Red'),
+        ('yellow', 'Yellow'),
+    ]
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    title = models.CharField(max_length=200)
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='blue')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date', 'start_time']
+
+    def __str__(self):
+        return f"{self.title} ({self.date} {self.start_time:%H:%M}–{self.end_time:%H:%M})"
+
+
 class Note(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)
     deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)
