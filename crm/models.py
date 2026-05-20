@@ -4,6 +4,7 @@ from django.db import models
 class Contact(models.Model):
     STATUS_CHOICES = [
         ('lead', 'Lead'),
+        ('call_back', 'Call Back'),
         ('prospect', 'Prospect'),
         ('customer', 'Customer'),
         ('inactive', 'Inactive'),
