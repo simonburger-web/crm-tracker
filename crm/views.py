@@ -124,7 +124,7 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
 def dashboard(request):
     contacts = Contact.objects.all()
     deals = Deal.objects.all()
-    total_contacts = contacts.count()
+    total_contacts = contacts.exclude(status='inactive').count()
     total_deals = deals.count()
     pipeline_value = deals.filter(stage__in=['prospecting', 'proposal', 'negotiation']).aggregate(total=Sum('value'))['total'] or 0
     won_value = deals.filter(stage='won').aggregate(total=Sum('value'))['total'] or 0
