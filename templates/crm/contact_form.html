@@ -9,7 +9,7 @@
     <form method="post" class="space-y-5">
       {% csrf_token %}
       {% for field in form %}
-      <div>
+      <div {% if field.html_name == 'estimated_value' %}id="estimated-value-row" style="display:none"{% endif %}>
         <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
         {{ field }}
         {% if field.errors %}
@@ -28,4 +28,19 @@
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    var statusEl = document.getElementById('id_status');
+    var evRow = document.getElementById('estimated-value-row');
+    if (!statusEl || !evRow) return;
+
+    function toggle() {
+      evRow.style.display = statusEl.value === 'prospect' ? '' : 'none';
+    }
+
+    statusEl.addEventListener('change', toggle);
+    toggle();
+  })();
+</script>
 {% endblock %}

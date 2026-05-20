@@ -47,6 +47,12 @@
           <dd class="text-gray-900">{{ contact.phone }}</dd>
         </div>
         {% endif %}
+        {% if contact.estimated_value %}
+        <div class="flex gap-2">
+          <dt class="text-gray-500 w-20 flex-shrink-0">Est. Value</dt>
+          <dd class="text-gray-900 font-medium">${{ contact.estimated_value|floatformat:0 }}</dd>
+        </div>
+        {% endif %}
         <div class="flex gap-2">
           <dt class="text-gray-500 w-20 flex-shrink-0">Added</dt>
           <dd class="text-gray-900">{{ contact.created_at|date:"M d, Y" }}</dd>

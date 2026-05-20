@@ -127,6 +127,7 @@ def dashboard(request):
     total_contacts = contacts.exclude(status='inactive').count()
     total_deals = deals.count()
     pipeline_value = deals.filter(stage__in=['prospecting', 'proposal', 'negotiation']).aggregate(total=Sum('value'))['total'] or 0
+    pipeline_value += Contact.objects.filter(status='prospect').aggregate(total=Sum('estimated_value'))['total'] or 0
     won_value = deals.filter(stage='won').aggregate(total=Sum('value'))['total'] or 0
     stage_data = [(stage, deals.filter(stage=stage).count(), label) for stage, label in Deal.STAGE_CHOICES]
     recent_contacts = contacts[:5]
