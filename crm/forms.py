@@ -61,6 +61,17 @@ class NoteForm(forms.ModelForm):
 
 
 class LeadsGeneratorForm(forms.Form):
+    COUNTRY_CHOICES = [
+        ('us', 'United States'),
+        ('sa', 'South Africa'),
+    ]
+
+    country = forms.ChoiceField(
+        choices=COUNTRY_CHOICES,
+        initial='us',
+        widget=forms.Select(attrs={'class': 'form-input'}),
+        label='Country',
+    )
     keyword = forms.CharField(
         required=True,
         widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. plumbing, dentist, auto repair'}),
@@ -68,12 +79,12 @@ class LeadsGeneratorForm(forms.Form):
     )
     state = forms.CharField(
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. CA'}),
-        label='State (optional)',
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. CA or Gauteng'}),
+        label='State / Province (optional)',
     )
     city = forms.CharField(
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. San Diego'}),
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. San Diego or Cape Town'}),
         label='City (optional)',
     )
     max_results = forms.IntegerField(

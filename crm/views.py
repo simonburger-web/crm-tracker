@@ -10,7 +10,13 @@ from .models import Contact, Deal, Note, Meeting, TodoBlock
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
 
 
-def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max_results: int = 25):
+_COUNTRY_CONFIG = {
+    'us': {'label': 'United States', 'gl': 'us'},
+    'sa': {'label': 'South Africa', 'gl': 'za'},
+}
+
+
+def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max_results: int = 25, country: str = 'us'):
     """
     Fetch businesses matching filters, ideally restricted to "no website".
 
@@ -28,12 +34,14 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
     if not token:
         raise RuntimeError('LEADS_GENERATOR_API_TOKEN is not set')
 
+    country_cfg = _COUNTRY_CONFIG.get(country) or _COUNTRY_CONFIG['us']
+
     q_parts = [keyword.strip()]
     if city.strip():
         q_parts.append(city.strip())
     if state.strip():
         q_parts.append(state.strip())
-    q_parts.append('United States')
+    q_parts.append(country_cfg['label'])
     query = ' '.join([p for p in q_parts if p])
 
     out = []
@@ -63,7 +71,7 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
             'type': 'search',
             'q': query,
             'hl': 'en',
-            'gl': 'us',
+            'gl': country_cfg['gl'],
             'google_domain': 'google.com',
             'api_key': token,
             'start': start,
@@ -420,10 +428,12 @@ def note_delete(request, pk):
 
 def leads_generator(request):
     """
-    Leads Generator: scrape/fetch US businesses with no websites, then import as US leads.
+    Leads Generator: fetch businesses with no websites, then import as leads for the selected country.
     """
     session_key = 'leads_generator_last_results'
+    session_country_key = 'leads_generator_last_country'
     results = request.session.get(session_key) or []
+    last_country = request.session.get(session_country_key) or 'us'
     error = None
     imported_count = None
 
@@ -431,6 +441,7 @@ def leads_generator(request):
         action = request.POST.get('action', 'search')
         if action == 'import':
             to_import = request.session.get(session_key) or []
+            region = last_country  # 'us' or 'sa'
             created = 0
             for r in to_import:
                 name = (r.get('name') or '').strip()
@@ -448,14 +459,14 @@ def leads_generator(request):
                     name=name,
                     phone=phone,
                     company=company,
-                    region='us',
+                    region=region,
                 ).exists()
                 if not exists:
                     Contact.objects.create(
                         name=name,
                         phone=phone,
                         company=company,
-                        region='us',
+                        region=region,
                         status='lead',
                     )
                     created += 1
@@ -467,12 +478,14 @@ def leads_generator(request):
             form = LeadsGeneratorForm(request.POST)
             if form.is_valid():
                 cd = form.cleaned_data
+                country = cd.get('country') or 'us'
                 try:
                     fetched = _leads_generator_fetch(
                         keyword=cd['keyword'],
                         state=cd.get('state') or '',
                         city=cd.get('city') or '',
                         max_results=cd.get('max_results') or 25,
+                        country=country,
                     )
                     # Defensive normalization for the template/session
                     inactive_phones = set(
@@ -491,6 +504,8 @@ def leads_generator(request):
                             'is_inactive': phone in inactive_phones,
                         })
                     request.session[session_key] = results
+                    request.session[session_country_key] = country
+                    last_country = country
                 except Exception as e:
                     error = str(e)
             else:
@@ -498,10 +513,13 @@ def leads_generator(request):
     else:
         form = LeadsGeneratorForm()
 
+    country_label = _COUNTRY_CONFIG.get(last_country, _COUNTRY_CONFIG['us'])['label']
+
     return render(request, 'crm/leads_generator.html', {
         'form': form,
         'results': results,
         'error': error,
         'imported_count': imported_count,
         'token_configured': bool(os.environ.get('LEADS_GENERATOR_API_TOKEN', '').strip()),
+        'country_label': country_label,
     })

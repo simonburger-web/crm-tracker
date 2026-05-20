@@ -7,7 +7,7 @@
   <div class="max-w-5xl space-y-6">
     {% if imported_count != None %}
       <div class="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
-        Imported {{ imported_count }} leads into US Leads.
+        Imported {{ imported_count }} leads into {{ country_label }} Leads.
       </div>
     {% endif %}
 
@@ -22,7 +22,12 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="search" />
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ form.country.label }}</label>
+            {{ form.country }}
+            {% if form.country.errors %}<p class="text-sm text-red-600 mt-1">{{ form.country.errors|striptags }}</p>{% endif %}
+          </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">{{ form.keyword.label }}</label>
             {{ form.keyword }}
@@ -67,7 +72,7 @@
         <form method="post">
           {% csrf_token %}
           <input type="hidden" name="action" value="import" />
-          <button type="submit" class="btn-secondary" {% if not results %}disabled{% endif %}>Import As US Leads</button>
+          <button type="submit" class="btn-secondary" {% if not results %}disabled{% endif %}>Import As {{ country_label }} Leads</button>
         </form>
       </div>
 
