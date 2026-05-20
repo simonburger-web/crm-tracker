@@ -98,10 +98,13 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
             title = (r.get('title') or '').strip()
             if not title:
                 continue
+            phone = (r.get('phone') or '').strip()
+            if not phone:
+                continue
             out.append({
                 'name': title,
                 'company': title,
-                'phone': (r.get('phone') or '').strip(),
+                'phone': phone,
                 'website': '',
                 'address': (r.get('address') or '').strip(),
                 'source_id': source_id,
@@ -437,6 +440,10 @@ def leads_generator(request):
                 company = (r.get('company') or '').strip()
                 if not company:
                     company = name
+                # Skip if already exists as inactive (any region)
+                if phone and Contact.objects.filter(phone=phone, status='inactive').exists():
+                    continue
+                # Skip if an active duplicate already exists
                 exists = Contact.objects.filter(
                     name=name,
                     phone=phone,
@@ -468,15 +475,20 @@ def leads_generator(request):
                         max_results=cd.get('max_results') or 25,
                     )
                     # Defensive normalization for the template/session
+                    inactive_phones = set(
+                        Contact.objects.filter(status='inactive').exclude(phone='').values_list('phone', flat=True)
+                    )
                     results = []
                     for r in fetched[: (cd.get('max_results') or 25)]:
+                        phone = (r.get('phone') or '').strip()
                         results.append({
                             'name': (r.get('name') or '').strip(),
                             'company': (r.get('company') or r.get('name') or '').strip(),
-                            'phone': (r.get('phone') or '').strip(),
+                            'phone': phone,
                             'website': (r.get('website') or '').strip(),
                             'address': (r.get('address') or '').strip(),
                             'source_id': (r.get('source_id') or '').strip(),
+                            'is_inactive': phone in inactive_phones,
                         })
                     request.session[session_key] = results
                 except Exception as e:
