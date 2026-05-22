@@ -48,7 +48,7 @@
     <div class="meetings-drop-zone flex-1 p-3 space-y-2 rounded-md transition-all" data-date="{{ day|date:'Y-m-d' }}">
       {% for meeting in meetings %}
       <div class="calendar-meeting-card rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative"
-           style="cursor:grab"
+           style="cursor:grab;user-select:none;"
            draggable="true"
            data-meeting-id="{{ meeting.pk }}"
            data-title="{{ meeting.title }}"
@@ -75,10 +75,10 @@
 
         <!-- Actions -->
         <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-          <a href="{% url 'meeting_edit' meeting.pk %}" class="text-gray-400 hover:text-indigo-600" title="Edit">
+          <a href="{% url 'meeting_edit' meeting.pk %}" draggable="false" class="text-gray-400 hover:text-indigo-600" title="Edit">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
           </a>
-          <a href="{% url 'meeting_delete' meeting.pk %}" class="text-gray-400 hover:text-red-500" title="Delete">
+          <a href="{% url 'meeting_delete' meeting.pk %}" draggable="false" class="text-gray-400 hover:text-red-500" title="Delete">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </a>
         </div>
@@ -459,25 +459,14 @@ function escHtml(s) {
     email:     ['bg-yellow-100 text-yellow-700','Email'],
   };
 
-  let draggedEl   = null;   // the card element being dragged
-  let sourceZone  = null;   // the meetings-drop-zone it came from
-  let isMissed    = false;  // dragged from the missed-meetings panel
-
-  // ── Helper: build a calendar meeting card element ──────────────────
+  // ── Build a calendar meeting card element ──────────────────────────
   function buildMeetingCard(d) {
     const [badgeCls, badgeLabel] = TYPE_BADGE[d.meeting_type] || ['',''];
     const el = document.createElement('div');
     el.className = 'calendar-meeting-card rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative';
-    el.style.cursor = 'grab';
-    el.draggable = true;
-    el.dataset.meetingId  = d.pk;
-    el.dataset.title      = d.title;
-    el.dataset.time       = d.time;
-    el.dataset.contact    = d.contact;
-    el.dataset.phone      = d.phone || '';
-    el.dataset.type       = d.meeting_type;
-    el.dataset.editUrl    = d.edit_url;
-    el.dataset.deleteUrl  = d.delete_url;
+    el.style.cssText = 'cursor:grab;user-select:none;';
+    el.setAttribute('draggable', 'true');
+    el.dataset.meetingId = d.pk;
     el.innerHTML = `
       <p class="font-semibold text-indigo-800 truncate">${escHtml(d.title)}</p>
       <p class="text-indigo-600">${escHtml(d.time)}</p>
@@ -485,65 +474,51 @@ function escHtml(s) {
       ${d.phone ? `<p class="text-gray-500 truncate">${escHtml(d.phone)}</p>` : ''}
       ${badgeCls ? `<span class="inline-block mt-1 rounded-full ${badgeCls} px-2 py-0.5 text-xs">${badgeLabel}</span>` : ''}
       <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-        <a href="${d.edit_url}" class="text-gray-400 hover:text-indigo-600" title="Edit">
+        <a href="${d.edit_url}" draggable="false" class="text-gray-400 hover:text-indigo-600" title="Edit">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
         </a>
-        <a href="${d.delete_url}" class="text-gray-400 hover:text-red-500" title="Delete">
+        <a href="${d.delete_url}" draggable="false" class="text-gray-400 hover:text-red-500" title="Delete">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </a>
       </div>`;
-    bindCardDrag(el);
+    wireCard(el);
     return el;
   }
 
-  // ── Helper: show/hide "No meetings" placeholder ────────────────────
   function refreshEmpty(zone) {
-    const existing = zone.querySelector('.no-meetings-msg');
     const hasCards = zone.querySelector('.calendar-meeting-card');
-    if (!hasCards && !existing) {
+    const msg = zone.querySelector('.no-meetings-msg');
+    if (!hasCards && !msg) {
       const p = document.createElement('p');
       p.className = 'text-xs text-gray-300 text-center pt-4 no-meetings-msg';
       p.textContent = 'No meetings';
       zone.appendChild(p);
-    } else if (hasCards && existing) {
-      existing.remove();
+    } else if (hasCards && msg) {
+      msg.remove();
     }
   }
 
-  // ── Wire drag events onto a calendar meeting card ──────────────────
-  function bindCardDrag(card) {
+  // ── Wire a draggable card (calendar or missed) ─────────────────────
+  function wireCard(card) {
     card.addEventListener('dragstart', e => {
-      draggedEl  = card;
-      sourceZone = card.closest('.meetings-drop-zone');
-      isMissed   = false;
-      e.dataTransfer.setData('text/plain', card.dataset.meetingId);
       e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => card.style.opacity = '0.4', 0);
+      e.dataTransfer.setData('text/plain', card.dataset.meetingId);
+      // Store source info in extra data fields
+      const zone = card.closest('.meetings-drop-zone');
+      e.dataTransfer.setData('application/source-date', zone ? zone.dataset.date : '');
+      e.dataTransfer.setData('application/is-missed', card.classList.contains('missed-meeting-card') ? '1' : '0');
+      setTimeout(() => { card.style.opacity = '0.35'; }, 0);
     });
-    card.addEventListener('dragend', () => {
-      card.style.opacity = '';
-      draggedEl = sourceZone = null;
-    });
+    card.addEventListener('dragend', () => { card.style.opacity = ''; });
   }
 
-  // Wire existing calendar cards
-  document.querySelectorAll('.calendar-meeting-card').forEach(bindCardDrag);
+  // Wire all existing cards
+  document.querySelectorAll('.calendar-meeting-card, .missed-meeting-card').forEach(wireCard);
 
-  // Wire missed-meetings panel cards
-  document.querySelectorAll('.missed-meeting-card').forEach(card => {
-    card.addEventListener('dragstart', e => {
-      draggedEl  = card;
-      sourceZone = null;
-      isMissed   = true;
-      e.dataTransfer.setData('text/plain', card.dataset.meetingId);
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => card.style.opacity = '0.4', 0);
-    });
-    card.addEventListener('dragend', () => { card.style.opacity = ''; draggedEl = null; });
-  });
-
-  // ── Wire drop zones (all 5 meeting columns) ────────────────────────
+  // ── Wire drop zones ────────────────────────────────────────────────
   document.querySelectorAll('.meetings-drop-zone').forEach(zone => {
+    zone.addEventListener('dragenter', e => { e.preventDefault(); });
+
     zone.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
@@ -565,16 +540,10 @@ function escHtml(s) {
 
       const meetingId  = e.dataTransfer.getData('text/plain');
       const targetDate = zone.dataset.date;
+      const sourceDate = e.dataTransfer.getData('application/source-date');
+      const fromMissed = e.dataTransfer.getData('application/is-missed') === '1';
       if (!meetingId || !targetDate) return;
-
-      // Capture before any awaits — dragend fires during the fetch and
-      // would null these module-level variables before we can use them.
-      const el         = draggedEl;
-      const src        = sourceZone;
-      const fromMissed = isMissed;
-
-      // Don't drop onto the same column it came from
-      if (!fromMissed && src && src === zone) return;
+      if (!fromMissed && sourceDate === targetDate) return; // same column
 
       const url = RESCHEDULE_URL_TPL.replace('__PK__', meetingId);
       try {
@@ -586,20 +555,25 @@ function escHtml(s) {
         const data = await resp.json();
         if (!resp.ok) { alert(data.error || 'Could not reschedule.'); return; }
 
-        // ── Remove from source ─────────────────────────────────────
-        if (fromMissed && el) {
-          el.remove();
-          const ml = document.getElementById('missed-meetings-list');
-          if (ml && !ml.querySelector('.missed-meeting-card')) {
-            const sec = document.getElementById('missed-meetings-section');
-            if (sec) sec.classList.add('hidden');
+        // Remove source card (look it up fresh — no stale closure references)
+        const srcCard = document.querySelector(
+          `.calendar-meeting-card[data-meeting-id="${meetingId}"], .missed-meeting-card[data-meeting-id="${meetingId}"]`
+        );
+        if (srcCard) {
+          const srcZone = srcCard.closest('.meetings-drop-zone');
+          srcCard.remove();
+          if (srcZone) refreshEmpty(srcZone);
+          // Hide missed panel if now empty
+          if (fromMissed) {
+            const ml = document.getElementById('missed-meetings-list');
+            if (ml && !ml.querySelector('.missed-meeting-card')) {
+              const sec = document.getElementById('missed-meetings-section');
+              if (sec) sec.classList.add('hidden');
+            }
           }
-        } else if (el) {
-          el.remove();
-          if (src) refreshEmpty(src);
         }
 
-        // ── Add to target column ───────────────────────────────────
+        // Add new card to target zone
         const emptyMsg = zone.querySelector('.no-meetings-msg');
         if (emptyMsg) emptyMsg.remove();
         zone.appendChild(buildMeetingCard(data));
