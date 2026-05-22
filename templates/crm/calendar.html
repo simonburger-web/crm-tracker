@@ -564,8 +564,14 @@ function escHtml(s) {
       const targetDate = zone.dataset.date;
       if (!meetingId || !targetDate) return;
 
+      // Capture before any awaits — dragend fires during the fetch and
+      // would null these module-level variables before we can use them.
+      const el         = draggedEl;
+      const src        = sourceZone;
+      const fromMissed = isMissed;
+
       // Don't drop onto the same column it came from
-      if (!isMissed && sourceZone && sourceZone === zone) return;
+      if (!fromMissed && src && src === zone) return;
 
       const url = RESCHEDULE_URL_TPL.replace('__PK__', meetingId);
       try {
@@ -578,17 +584,16 @@ function escHtml(s) {
         if (!resp.ok) { alert(data.error || 'Could not reschedule.'); return; }
 
         // ── Remove from source ─────────────────────────────────────
-        if (isMissed && draggedEl) {
-          draggedEl.remove();
-          // Hide panel if empty
+        if (fromMissed && el) {
+          el.remove();
           const ml = document.getElementById('missed-meetings-list');
           if (ml && !ml.querySelector('.missed-meeting-card')) {
             const sec = document.getElementById('missed-meetings-section');
             if (sec) sec.classList.add('hidden');
           }
-        } else if (sourceZone) {
-          draggedEl.remove();
-          refreshEmpty(sourceZone);
+        } else if (el) {
+          el.remove();
+          if (src) refreshEmpty(src);
         }
 
         // ── Add to target column ───────────────────────────────────
