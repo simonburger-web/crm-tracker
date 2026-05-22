@@ -44,9 +44,18 @@
     </div>
 
     <!-- Meetings -->
-    <div class="flex-1 p-3 space-y-2 rounded-md transition-all{% if day == today %} today-meetings-drop{% endif %}"{% if day == today %} id="today-meetings-list"{% endif %}>
+    <div class="meetings-drop-zone flex-1 p-3 space-y-2 rounded-md transition-all" data-date="{{ day|date:'Y-m-d' }}">
       {% for meeting in meetings %}
-      <div class="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative">
+      <div class="calendar-meeting-card rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative cursor-grab"
+           draggable="true"
+           data-meeting-id="{{ meeting.pk }}"
+           data-title="{{ meeting.title }}"
+           data-time="{{ meeting.scheduled_at|date:'H:i' }}"
+           data-contact="{{ meeting.contact.name }}"
+           data-phone="{{ meeting.contact.phone }}"
+           data-type="{{ meeting.meeting_type }}"
+           data-edit-url="{% url 'meeting_edit' meeting.pk %}"
+           data-delete-url="{% url 'meeting_delete' meeting.pk %}">
         <p class="font-semibold text-indigo-800 truncate">{{ meeting.title }}</p>
         <p class="text-indigo-600">{{ meeting.scheduled_at|date:"H:i" }}</p>
         <p class="text-gray-500 truncate">{{ meeting.contact.name }}</p>
@@ -439,100 +448,158 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Drag-and-drop: reschedule missed meetings to today ───────────────
+// ── Drag-and-drop: reschedule meetings between calendar columns ───────
 (function() {
-  const todayDropZone = document.getElementById('today-meetings-list');
-  if (!todayDropZone) return;
-
-  const TYPE_COLORS = {
-    call:      'bg-green-100 text-green-700',
-    video:     'bg-blue-100 text-blue-700',
-    in_person: 'bg-purple-100 text-purple-700',
-    email:     'bg-yellow-100 text-yellow-700',
+  const TYPE_BADGE = {
+    call:      ['bg-green-100 text-green-700', 'Call'],
+    video:     ['bg-blue-100 text-blue-700',   'Video'],
+    in_person: ['bg-purple-100 text-purple-700','In Person'],
+    email:     ['bg-yellow-100 text-yellow-700','Email'],
   };
-  const TYPE_LABELS = { call: 'Call', video: 'Video', in_person: 'In Person', email: 'Email' };
 
-  // Make missed-meeting cards draggable
-  document.querySelectorAll('.missed-meeting-card').forEach(card => {
+  let draggedEl   = null;   // the card element being dragged
+  let sourceZone  = null;   // the meetings-drop-zone it came from
+  let isMissed    = false;  // dragged from the missed-meetings panel
+
+  // ── Helper: build a calendar meeting card element ──────────────────
+  function buildMeetingCard(d) {
+    const [badgeCls, badgeLabel] = TYPE_BADGE[d.meeting_type] || ['',''];
+    const el = document.createElement('div');
+    el.className = 'calendar-meeting-card rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative cursor-grab';
+    el.draggable = true;
+    el.dataset.meetingId  = d.pk;
+    el.dataset.title      = d.title;
+    el.dataset.time       = d.time;
+    el.dataset.contact    = d.contact;
+    el.dataset.phone      = d.phone || '';
+    el.dataset.type       = d.meeting_type;
+    el.dataset.editUrl    = d.edit_url;
+    el.dataset.deleteUrl  = d.delete_url;
+    el.innerHTML = `
+      <p class="font-semibold text-indigo-800 truncate">${escHtml(d.title)}</p>
+      <p class="text-indigo-600">${escHtml(d.time)}</p>
+      <p class="text-gray-500 truncate">${escHtml(d.contact)}</p>
+      ${d.phone ? `<p class="text-gray-500 truncate">${escHtml(d.phone)}</p>` : ''}
+      ${badgeCls ? `<span class="inline-block mt-1 rounded-full ${badgeCls} px-2 py-0.5 text-xs">${badgeLabel}</span>` : ''}
+      <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
+        <a href="${d.edit_url}" class="text-gray-400 hover:text-indigo-600" title="Edit">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
+        </a>
+        <a href="${d.delete_url}" class="text-gray-400 hover:text-red-500" title="Delete">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </a>
+      </div>`;
+    bindCardDrag(el);
+    return el;
+  }
+
+  // ── Helper: show/hide "No meetings" placeholder ────────────────────
+  function refreshEmpty(zone) {
+    const existing = zone.querySelector('.no-meetings-msg');
+    const hasCards = zone.querySelector('.calendar-meeting-card');
+    if (!hasCards && !existing) {
+      const p = document.createElement('p');
+      p.className = 'text-xs text-gray-300 text-center pt-4 no-meetings-msg';
+      p.textContent = 'No meetings';
+      zone.appendChild(p);
+    } else if (hasCards && existing) {
+      existing.remove();
+    }
+  }
+
+  // ── Wire drag events onto a calendar meeting card ──────────────────
+  function bindCardDrag(card) {
     card.addEventListener('dragstart', e => {
+      draggedEl  = card;
+      sourceZone = card.closest('.meetings-drop-zone');
+      isMissed   = false;
       e.dataTransfer.setData('text/plain', card.dataset.meetingId);
       e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => card.classList.add('opacity-40'), 0);
+      setTimeout(() => card.style.opacity = '0.4', 0);
     });
-    card.addEventListener('dragend', () => card.classList.remove('opacity-40'));
+    card.addEventListener('dragend', () => {
+      card.style.opacity = '';
+      draggedEl = sourceZone = null;
+    });
+  }
+
+  // Wire existing calendar cards
+  document.querySelectorAll('.calendar-meeting-card').forEach(bindCardDrag);
+
+  // Wire missed-meetings panel cards
+  document.querySelectorAll('.missed-meeting-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      draggedEl  = card;
+      sourceZone = null;
+      isMissed   = true;
+      e.dataTransfer.setData('text/plain', card.dataset.meetingId);
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => card.style.opacity = '0.4', 0);
+    });
+    card.addEventListener('dragend', () => { card.style.opacity = ''; draggedEl = null; });
   });
 
-  // Drop zone: today's meetings column
-  todayDropZone.addEventListener('dragover', e => {
-    if (!e.dataTransfer.types.includes('text/plain')) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    todayDropZone.classList.add('bg-indigo-50', 'outline', 'outline-2', 'outline-indigo-300');
-  });
+  // ── Wire drop zones (all 5 meeting columns) ────────────────────────
+  document.querySelectorAll('.meetings-drop-zone').forEach(zone => {
+    zone.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      zone.style.background = '#eef2ff';
+      zone.style.boxShadow  = 'inset 0 0 0 2px #a5b4fc';
+    });
 
-  todayDropZone.addEventListener('dragleave', e => {
-    if (!todayDropZone.contains(e.relatedTarget)) {
-      todayDropZone.classList.remove('bg-indigo-50', 'outline', 'outline-2', 'outline-indigo-300');
-    }
-  });
-
-  todayDropZone.addEventListener('drop', async e => {
-    e.preventDefault();
-    todayDropZone.classList.remove('bg-indigo-50', 'outline', 'outline-2', 'outline-indigo-300');
-
-    const meetingId = e.dataTransfer.getData('text/plain');
-    if (!meetingId) return;
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const url = RESCHEDULE_URL_TPL.replace('__PK__', meetingId);
-
-    try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-        body: JSON.stringify({ date: todayStr }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) { alert(data.error || 'Could not reschedule meeting.'); return; }
-
-      // Remove from missed panel
-      const missedCard = document.querySelector(`.missed-meeting-card[data-meeting-id="${meetingId}"]`);
-      if (missedCard) missedCard.remove();
-
-      // Hide panel if no missed meetings remain
-      const missedList = document.getElementById('missed-meetings-list');
-      if (missedList && !missedList.querySelector('.missed-meeting-card')) {
-        const section = document.getElementById('missed-meetings-section');
-        if (section) section.classList.add('hidden');
+    zone.addEventListener('dragleave', e => {
+      if (!zone.contains(e.relatedTarget)) {
+        zone.style.background = '';
+        zone.style.boxShadow  = '';
       }
+    });
 
-      // Remove "No meetings" placeholder
-      const emptyMsg = todayDropZone.querySelector('.no-meetings-msg');
-      if (emptyMsg) emptyMsg.remove();
+    zone.addEventListener('drop', async e => {
+      e.preventDefault();
+      zone.style.background = '';
+      zone.style.boxShadow  = '';
 
-      // Inject meeting card into today's column
-      const colorsClass = TYPE_COLORS[data.meeting_type] || '';
-      const label = TYPE_LABELS[data.meeting_type] || escHtml(data.meeting_type);
-      const div = document.createElement('div');
-      div.className = 'rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs group relative';
-      div.innerHTML = `
-        <p class="font-semibold text-indigo-800 truncate">${escHtml(data.title)}</p>
-        <p class="text-indigo-600">${escHtml(data.time)}</p>
-        <p class="text-gray-500 truncate">${escHtml(data.contact)}</p>
-        ${data.phone ? `<p class="text-gray-500 truncate">${escHtml(data.phone)}</p>` : ''}
-        <span class="inline-block mt-1 rounded-full ${colorsClass} px-2 py-0.5 text-xs">${label}</span>
-        <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-          <a href="${data.edit_url}" class="text-gray-400 hover:text-indigo-600" title="Edit">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
-          </a>
-          <a href="${data.delete_url}" class="text-gray-400 hover:text-red-500" title="Delete">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-          </a>
-        </div>`;
-      todayDropZone.appendChild(div);
-    } catch (err) {
-      alert('Network error. Please try again.');
-    }
+      const meetingId  = e.dataTransfer.getData('text/plain');
+      const targetDate = zone.dataset.date;
+      if (!meetingId || !targetDate) return;
+
+      // Don't drop onto the same column it came from
+      if (!isMissed && sourceZone && sourceZone === zone) return;
+
+      const url = RESCHEDULE_URL_TPL.replace('__PK__', meetingId);
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+          body: JSON.stringify({ date: targetDate }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { alert(data.error || 'Could not reschedule.'); return; }
+
+        // ── Remove from source ─────────────────────────────────────
+        if (isMissed && draggedEl) {
+          draggedEl.remove();
+          // Hide panel if empty
+          const ml = document.getElementById('missed-meetings-list');
+          if (ml && !ml.querySelector('.missed-meeting-card')) {
+            const sec = document.getElementById('missed-meetings-section');
+            if (sec) sec.classList.add('hidden');
+          }
+        } else if (sourceZone) {
+          draggedEl.remove();
+          refreshEmpty(sourceZone);
+        }
+
+        // ── Add to target column ───────────────────────────────────
+        const emptyMsg = zone.querySelector('.no-meetings-msg');
+        if (emptyMsg) emptyMsg.remove();
+        zone.appendChild(buildMeetingCard(data));
+
+      } catch (err) {
+        alert('Network error. Please try again.');
+      }
+    });
   });
 })();
 </script>
