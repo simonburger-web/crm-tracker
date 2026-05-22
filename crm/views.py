@@ -5,6 +5,7 @@ import urllib.parse
 import urllib.request
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.db.models import Q, Sum, Count
 from .models import Contact, Deal, Note, Meeting, TodoBlock
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
@@ -328,11 +329,18 @@ def calendar_view(request):
             m.scheduled_at.strftime('%H:%M') for m in day_meetings[d]
         ]
 
+    # Fetch past meetings (last 7 days) for drag-to-reschedule
+    past_meetings = Meeting.objects.filter(
+        scheduled_at__date__gte=today - timedelta(days=7),
+        scheduled_at__date__lt=today,
+    ).select_related('contact').order_by('scheduled_at')
+
     day_data = [(d, day_meetings[d], day_todos[d]) for d in days]
     return render(request, 'crm/calendar.html', {
         'day_data': day_data,
         'today': today,
         'meeting_times_json': json.dumps(meeting_times_by_day),
+        'past_meetings': past_meetings,
     })
 
 
@@ -359,6 +367,37 @@ def meeting_delete(request, pk):
         meeting.delete()
         return redirect('calendar')
     return render(request, 'crm/meeting_confirm_delete.html', {'meeting': meeting})
+
+
+def meeting_reschedule(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    meeting = get_object_or_404(Meeting, pk=pk)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    target_date_str = data.get('date')
+    if not target_date_str:
+        return JsonResponse({'error': 'Missing date'}, status=400)
+    try:
+        target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Invalid date format'}, status=400)
+    old_dt = meeting.scheduled_at
+    meeting.scheduled_at = old_dt.replace(year=target_date.year, month=target_date.month, day=target_date.day)
+    meeting.save()
+    return JsonResponse({
+        'ok': True,
+        'pk': meeting.pk,
+        'title': meeting.title,
+        'time': meeting.scheduled_at.strftime('%H:%M'),
+        'contact': meeting.contact.name,
+        'phone': meeting.contact.phone or '',
+        'meeting_type': meeting.meeting_type,
+        'edit_url': reverse('meeting_edit', args=[meeting.pk]),
+        'delete_url': reverse('meeting_delete', args=[meeting.pk]),
+    })
 
 
 def todo_block_create(request):
