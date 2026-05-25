@@ -7,6 +7,40 @@
 {% endblock %}
 
 {% block content %}
+<script>
+(function() {
+  var storageKey = 'crm_filter_{{ region }}';
+  var params = new URLSearchParams(window.location.search);
+  var q = params.get('q') || '';
+  var status = params.get('status') || '';
+  var isClear = params.get('_clear') === '1';
+
+  if (isClear) {
+    localStorage.removeItem(storageKey);
+    window.location.replace(window.location.pathname);
+    return;
+  }
+
+  if (q || status) {
+    localStorage.setItem(storageKey, JSON.stringify({ q: q, status: status }));
+  } else {
+    var saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        var filter = JSON.parse(saved);
+        var newParams = new URLSearchParams();
+        if (filter.q) newParams.set('q', filter.q);
+        if (filter.status) newParams.set('status', filter.status);
+        if (newParams.toString()) {
+          window.location.replace(window.location.pathname + '?' + newParams.toString());
+        }
+      } catch(e) {
+        localStorage.removeItem(storageKey);
+      }
+    }
+  }
+})();
+</script>
 <!-- Filters -->
 <div class="bg-white rounded-xl border border-gray-200 p-4 mb-5 flex flex-wrap gap-3">
   <form method="get" class="flex flex-wrap gap-3 w-full">
@@ -19,7 +53,7 @@
       {% endfor %}
     </select>
     <button type="submit" class="btn-primary">Search</button>
-    {% if q or status %}<a href="{% url clear_url %}" class="btn-secondary">Clear</a>{% endif %}
+    {% if q or status %}<a href="{% url clear_url %}?_clear=1" class="btn-secondary">Clear</a>{% endif %}
   </form>
 </div>
 
