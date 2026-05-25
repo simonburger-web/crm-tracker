@@ -5,6 +5,7 @@ class Contact(models.Model):
     STATUS_CHOICES = [
         ('lead', 'Lead'),
         ('call_back', 'Call Back'),
+        ('call_back_no_answer', 'Call Back - No Answer'),
         ('prospect', 'Prospect'),
         ('customer', 'Customer'),
         ('inactive', 'Inactive'),

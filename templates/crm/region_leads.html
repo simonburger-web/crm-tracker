@@ -46,7 +46,7 @@
   <form method="get" class="flex flex-wrap gap-3 w-full">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, email, company..."
       class="form-input flex-1 min-w-48">
-    <select name="status" class="form-input w-40">
+    <select name="status" class="form-input w-40" onchange="this.form.submit()">
       <option value="">All statuses</option>
       {% for val, label in status_choices %}
       <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
