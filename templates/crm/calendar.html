@@ -522,7 +522,7 @@ function escHtml(s) {
   document.querySelectorAll('.cal-add-btn').forEach(btn => {
     const date = btn.dataset.date;
     const createUrl = btn.dataset.createUrl;
-    const dropdown = btn.closest('[class*="relative"]').querySelector('.cal-add-dropdown');
+    const dropdown = btn.parentElement.querySelector('.cal-add-dropdown');
 
     if (!dropdown) return;
 
