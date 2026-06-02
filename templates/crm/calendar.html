@@ -88,10 +88,13 @@
     </div>
 
     <!-- Add button -->
-    <div class="px-3 pb-3">
-      <a href="{% url 'meeting_create' %}?date={{ day|date:'Y-m-d' }}" class="block text-center text-xs text-indigo-400 hover:text-indigo-600 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1.5 transition">
+    <div class="px-3 pb-3 relative">
+      <button class="cal-add-btn block w-full text-center text-xs text-indigo-400 hover:text-indigo-600 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1.5 transition"
+              data-date="{{ day|date:'Y-m-d' }}"
+              data-create-url="{% url 'meeting_create' %}?date={{ day|date:'Y-m-d' }}">
         + Add
-      </a>
+      </button>
+      <div class="cal-add-dropdown hidden absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden text-xs"></div>
     </div>
   </div>
   {% endfor %}
@@ -201,6 +204,7 @@
 <!-- Pass meeting times to JS for conflict checking -->
 <script>
 const MEETING_TIMES = {{ meeting_times_json|safe }};
+const MISSED_MEETINGS = [{% for m in past_meetings %}{"pk":"{{ m.pk }}","title":"{{ m.title|escapejs }}","contact":"{{ m.contact.name|escapejs }}","date":"{{ m.scheduled_at|date:'D j M' }}"}{% if not forloop.last %},{% endif %}{% endfor %}];
 const TODO_CREATE_URL = "{% url 'todo_block_create' %}";
 const TODO_DELETE_URL_TPL = "{% url 'todo_block_delete' 0 %}".replace('/0/', '/__PK__/').replace('/0/', '/__PK__/');
 const RESCHEDULE_URL_TPL = "{% url 'meeting_reschedule' 0 %}".replace('/0/', '/__PK__/');
@@ -449,6 +453,97 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── "+ Add" dropdown: new meeting or reschedule a missed meeting ──────
+(function() {
+  // Track which missed meetings have been rescheduled (remove from dropdowns)
+  const rescheduled = new Set();
+
+  function buildDropdown(dropdown, date, createUrl) {
+    dropdown.innerHTML = '';
+    // "New meeting" row
+    const newRow = document.createElement('a');
+    newRow.href = createUrl;
+    newRow.className = 'flex items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-indigo-600 font-medium border-b border-gray-100';
+    newRow.innerHTML = '<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> New meeting';
+    dropdown.appendChild(newRow);
+
+    const available = MISSED_MEETINGS.filter(m => !rescheduled.has(m.pk));
+    if (available.length > 0) {
+      const hdr = document.createElement('p');
+      hdr.className = 'px-3 pt-2 pb-1 text-gray-400 font-semibold uppercase tracking-wide';
+      hdr.style.fontSize = '10px';
+      hdr.textContent = 'Reschedule missed';
+      dropdown.appendChild(hdr);
+
+      available.forEach(m => {
+        const row = document.createElement('button');
+        row.className = 'w-full text-left px-3 py-2 hover:bg-amber-50 text-amber-800 flex flex-col gap-0.5';
+        row.innerHTML = `<span class="font-semibold truncate">${escHtml(m.title)}</span><span class="text-amber-500">${escHtml(m.contact)} · ${escHtml(m.date)}</span>`;
+        row.addEventListener('click', async () => {
+          dropdown.classList.add('hidden');
+          try {
+            const url = RESCHEDULE_URL_TPL.replace('__PK__', m.pk);
+            const resp = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+              body: JSON.stringify({ date }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Could not reschedule.'); return; }
+
+            rescheduled.add(m.pk);
+
+            // Remove from missed meetings panel
+            const srcCard = document.querySelector(`.missed-meeting-card[data-meeting-id="${m.pk}"]`);
+            if (srcCard) srcCard.remove();
+            const ml = document.getElementById('missed-meetings-list');
+            if (ml && !ml.querySelector('.missed-meeting-card')) {
+              const sec = document.getElementById('missed-meetings-section');
+              if (sec) sec.classList.add('hidden');
+            }
+
+            // Add card to the calendar column's drop zone via custom event (handled in calendar IIFE)
+            const col = document.querySelector(`.cal-day-col[data-date="${date}"]`);
+            if (col) col.dispatchEvent(new CustomEvent('add-rescheduled', { detail: data }));
+          } catch(e) { alert('Network error.'); }
+        });
+        dropdown.appendChild(row);
+      });
+    }
+  }
+
+  // Close all open dropdowns when clicking outside
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.cal-add-btn') && !e.target.closest('.cal-add-dropdown')) {
+      document.querySelectorAll('.cal-add-dropdown').forEach(d => d.classList.add('hidden'));
+    }
+  });
+
+  document.querySelectorAll('.cal-add-btn').forEach(btn => {
+    const date = btn.dataset.date;
+    const createUrl = btn.dataset.createUrl;
+    const dropdown = btn.closest('[class*="relative"]').querySelector('.cal-add-dropdown');
+
+    if (!dropdown) return;
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const available = MISSED_MEETINGS.filter(m => !rescheduled.has(m.pk));
+
+      // If no missed meetings, go straight to new-meeting form
+      if (available.length === 0) { window.location.href = createUrl; return; }
+
+      // Toggle dropdown
+      const isOpen = !dropdown.classList.contains('hidden');
+      document.querySelectorAll('.cal-add-dropdown').forEach(d => d.classList.add('hidden'));
+      if (!isOpen) {
+        buildDropdown(dropdown, date, createUrl);
+        dropdown.classList.remove('hidden');
+      }
+    });
+  });
+})();
+
 // ── Shared calendar helpers + missed-meeting click + calendar drag ────
 (function() {
   const TYPE_BADGE = {
@@ -565,6 +660,14 @@ function escHtml(s) {
   }
 
   document.querySelectorAll('.calendar-meeting-card').forEach(wireCard);
+
+  // ── Listen for rescheduled-from-dropdown events ───────────────────
+  document.querySelectorAll('.cal-day-col').forEach(col => {
+    col.addEventListener('add-rescheduled', e => {
+      const zone = col.querySelector('.meetings-drop-zone');
+      if (zone) addCardToZone(zone, e.detail);
+    });
+  });
 
   document.querySelectorAll('.cal-day-col').forEach(col => {
     const zone = col.querySelector('.meetings-drop-zone');
