@@ -270,7 +270,7 @@ const COLOR_BG = {
 };
 
 // ── Init each todo column ────────────────────────────────────────────
-document.querySelectorAll('#todo-grid [data-date]').forEach(col => {
+document.querySelectorAll('#todo-grid > [data-date]').forEach(col => {
   const date = col.dataset.date;
   const meetingTimes = MEETING_TIMES[date] || [];
   const blocked = blockedSlots(meetingTimes);
