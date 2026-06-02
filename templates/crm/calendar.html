@@ -11,12 +11,11 @@
 <!-- ── Missed meetings panel ─────────────────────────────────────────── -->
 {% if past_meetings %}
 <div id="missed-meetings-section" class="mb-5 bg-amber-50 border border-amber-200 rounded-lg p-4">
-  <p class="text-xs font-semibold text-amber-700 mb-2">Missed meetings — drag onto today to reschedule</p>
+  <p class="text-xs font-semibold text-amber-700 mb-1">Missed meetings</p>
+  <p id="missed-hint" class="text-xs text-amber-600 mb-2">Click a meeting to select it, then click a day to reschedule.</p>
   <div id="missed-meetings-list" class="flex flex-wrap gap-2">
     {% for meeting in past_meetings %}
-    <div class="missed-meeting-card rounded-md border border-amber-300 bg-white px-3 py-2 text-xs select-none shadow-sm hover:shadow transition"
-         style="cursor:grab"
-         draggable="true"
+    <div class="missed-meeting-card rounded-md border border-amber-300 bg-white px-3 py-2 text-xs select-none shadow-sm hover:shadow transition cursor-pointer"
          data-meeting-id="{{ meeting.pk }}">
       <p class="font-semibold text-amber-800 truncate max-w-36">{{ meeting.title }}</p>
       <p class="text-amber-600">{{ meeting.scheduled_at|date:"D j M" }} · {{ meeting.scheduled_at|date:"H:i" }}</p>
@@ -450,6 +449,83 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Missed meetings: click-to-select then click-a-day ────────────────
+(function() {
+  let selectedMissedId = null;
+
+  const hint = document.getElementById('missed-hint');
+
+  function setHint(msg) { if (hint) hint.textContent = msg; }
+
+  function clearSelection() {
+    selectedMissedId = null;
+    document.querySelectorAll('.missed-meeting-card').forEach(c => {
+      c.style.outline = '';
+      c.style.background = '';
+    });
+    document.querySelectorAll('.cal-day-col').forEach(c => {
+      c.style.outline = '';
+      c.style.cursor  = '';
+    });
+    setHint('Click a meeting to select it, then click a day to reschedule.');
+  }
+
+  document.querySelectorAll('.missed-meeting-card').forEach(card => {
+    card.addEventListener('click', () => {
+      // Clicking the already-selected card deselects it
+      if (selectedMissedId === card.dataset.meetingId) {
+        clearSelection();
+        return;
+      }
+      clearSelection();
+      selectedMissedId = card.dataset.meetingId;
+      card.style.outline = '2px solid #f59e0b';
+      card.style.background = '#fef3c7';
+      document.querySelectorAll('.cal-day-col').forEach(c => { c.style.cursor = 'pointer'; });
+      setHint('Now click a day on the calendar to reschedule.');
+    });
+  });
+
+  document.querySelectorAll('.cal-day-col').forEach(col => {
+    col.addEventListener('click', async () => {
+      if (!selectedMissedId) return;
+      const meetingId = selectedMissedId;
+      const targetDate = col.dataset.date;
+      clearSelection();
+
+      const url = RESCHEDULE_URL_TPL.replace('__PK__', meetingId);
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+          body: JSON.stringify({ date: targetDate }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { alert(data.error || 'Could not reschedule.'); return; }
+
+        // Remove from missed panel
+        const srcCard = document.querySelector(`.missed-meeting-card[data-meeting-id="${meetingId}"]`);
+        if (srcCard) srcCard.remove();
+        const ml = document.getElementById('missed-meetings-list');
+        if (ml && !ml.querySelector('.missed-meeting-card')) {
+          const sec = document.getElementById('missed-meetings-section');
+          if (sec) sec.classList.add('hidden');
+        }
+
+        // Add to calendar column
+        const zone = col.querySelector('.meetings-drop-zone');
+        if (zone) {
+          const emptyMsg = zone.querySelector('.no-meetings-msg');
+          if (emptyMsg) emptyMsg.remove();
+          zone.appendChild(buildMeetingCard(data));
+        }
+      } catch (err) {
+        alert('Network error. Please try again.');
+      }
+    });
+  });
+})();
+
 // ── Drag-and-drop: reschedule meetings between calendar columns ───────
 (function() {
   const TYPE_BADGE = {
@@ -459,10 +535,8 @@ function escHtml(s) {
     email:     ['bg-yellow-100 text-yellow-700','Email'],
   };
 
-  // Module-level drag state — avoids relying on custom dataTransfer MIME types
-  let activeDrag = null; // { meetingId, fromMissed, sourceDate }
+  let activeDrag = null; // { meetingId, sourceDate }
 
-  // ── Build a calendar meeting card element ──────────────────────────
   function buildMeetingCard(d) {
     const [badgeCls, badgeLabel] = TYPE_BADGE[d.meeting_type] || ['',''];
     const el = document.createElement('div');
@@ -501,13 +575,11 @@ function escHtml(s) {
     }
   }
 
-  // ── Wire a draggable card (calendar or missed) ─────────────────────
   function wireCard(card) {
     card.addEventListener('dragstart', e => {
       const sourceZone = card.closest('.meetings-drop-zone');
       activeDrag = {
         meetingId:  card.dataset.meetingId,
-        fromMissed: card.classList.contains('missed-meeting-card'),
         sourceDate: sourceZone ? sourceZone.dataset.date : '',
       };
       e.dataTransfer.effectAllowed = 'move';
@@ -520,47 +592,36 @@ function escHtml(s) {
     });
   }
 
-  // Wire all existing cards
-  document.querySelectorAll('.calendar-meeting-card, .missed-meeting-card').forEach(wireCard);
+  document.querySelectorAll('.calendar-meeting-card').forEach(wireCard);
 
-  // ── Wire drop zones (entire day column, not just the inner meetings list) ──
   document.querySelectorAll('.cal-day-col').forEach(col => {
-    // Inner zone used for DOM manipulation and visual highlight
     const zone = col.querySelector('.meetings-drop-zone');
 
     col.addEventListener('dragenter', e => {
+      if (!activeDrag) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
     });
 
     col.addEventListener('dragover', e => {
+      if (!activeDrag) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (zone) {
-        zone.style.background = '#eef2ff';
-        zone.style.boxShadow  = 'inset 0 0 0 2px #a5b4fc';
-      }
+      if (zone) { zone.style.background = '#eef2ff'; zone.style.boxShadow = 'inset 0 0 0 2px #a5b4fc'; }
     });
 
     col.addEventListener('dragleave', e => {
-      if (!col.contains(e.relatedTarget) && zone) {
-        zone.style.background = '';
-        zone.style.boxShadow  = '';
-      }
+      if (!col.contains(e.relatedTarget) && zone) { zone.style.background = ''; zone.style.boxShadow = ''; }
     });
 
     col.addEventListener('drop', async e => {
-      e.preventDefault();
-      if (zone) {
-        zone.style.background = '';
-        zone.style.boxShadow  = '';
-      }
-
       if (!activeDrag) return;
-      const { meetingId, fromMissed, sourceDate } = activeDrag;
+      e.preventDefault();
+      if (zone) { zone.style.background = ''; zone.style.boxShadow = ''; }
+
+      const { meetingId, sourceDate } = activeDrag;
       const targetDate = col.dataset.date;
-      if (!meetingId || !targetDate) return;
-      if (!fromMissed && sourceDate === targetDate) return; // same column
+      if (!meetingId || !targetDate || sourceDate === targetDate) return;
 
       const url = RESCHEDULE_URL_TPL.replace('__PK__', meetingId);
       try {
@@ -572,31 +633,18 @@ function escHtml(s) {
         const data = await resp.json();
         if (!resp.ok) { alert(data.error || 'Could not reschedule.'); return; }
 
-        // Remove source card (look it up fresh — no stale closure references)
-        const srcCard = document.querySelector(
-          `.calendar-meeting-card[data-meeting-id="${meetingId}"], .missed-meeting-card[data-meeting-id="${meetingId}"]`
-        );
+        const srcCard = document.querySelector(`.calendar-meeting-card[data-meeting-id="${meetingId}"]`);
         if (srcCard) {
           const srcZone = srcCard.closest('.meetings-drop-zone');
           srcCard.remove();
           if (srcZone) refreshEmpty(srcZone);
-          // Hide missed panel if now empty
-          if (fromMissed) {
-            const ml = document.getElementById('missed-meetings-list');
-            if (ml && !ml.querySelector('.missed-meeting-card')) {
-              const sec = document.getElementById('missed-meetings-section');
-              if (sec) sec.classList.add('hidden');
-            }
-          }
         }
 
-        // Add new card to the inner meetings list
         if (zone) {
           const emptyMsg = zone.querySelector('.no-meetings-msg');
           if (emptyMsg) emptyMsg.remove();
           zone.appendChild(buildMeetingCard(data));
         }
-
       } catch (err) {
         alert('Network error. Please try again.');
       }
