@@ -89,18 +89,12 @@
 
     <!-- Add button -->
     <div class="px-3 pb-3 relative">
-      {% if past_meetings %}
       <button class="cal-add-btn block w-full text-center text-xs text-indigo-400 hover:text-indigo-600 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1.5 transition"
               data-date="{{ day|date:'Y-m-d' }}"
               data-create-url="{% url 'meeting_create' %}?date={{ day|date:'Y-m-d' }}">
         + Add
       </button>
       <div class="cal-add-dropdown hidden absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden text-xs"></div>
-      {% else %}
-      <a href="{% url 'meeting_create' %}?date={{ day|date:'Y-m-d' }}" class="block text-center text-xs text-indigo-400 hover:text-indigo-600 border border-dashed border-gray-200 hover:border-indigo-300 rounded py-1.5 transition">
-        + Add
-      </a>
-      {% endif %}
     </div>
   </div>
   {% endfor %}
@@ -528,14 +522,14 @@ function escHtml(s) {
   document.querySelectorAll('.cal-add-btn').forEach(btn => {
     const date = btn.dataset.date;
     const createUrl = btn.dataset.createUrl;
-    const dropdown = btn.nextElementSibling; // always the .cal-add-dropdown div
+    const dropdown = btn.parentElement.querySelector('.cal-add-dropdown');
 
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const available = MISSED_MEETINGS.filter(m => !rescheduled.has(m.pk));
 
-      // All missed meetings already rescheduled — go straight to new-meeting form
-      if (available.length === 0) { window.location.href = createUrl; return; }
+      // No missed meetings — go straight to new-meeting form
+      if (available.length === 0 || !dropdown) { window.location.href = createUrl; return; }
 
       // Toggle dropdown
       const isOpen = !dropdown.classList.contains('hidden');
