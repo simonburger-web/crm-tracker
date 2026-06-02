@@ -30,7 +30,7 @@
 <!-- ── Calendar section ─────────────────────────────────────────────── -->
 <div class="grid grid-cols-5 gap-4">
   {% for day, meetings, todos in day_data %}
-  <div class="bg-white rounded-lg border border-gray-200 flex flex-col min-h-64">
+  <div class="cal-day-col bg-white rounded-lg border border-gray-200 flex flex-col min-h-64" data-date="{{ day|date:'Y-m-d' }}">
     <!-- Day header -->
     <div class="px-4 py-3 border-b border-gray-100 {% if day == today %}bg-indigo-600 rounded-t-lg{% endif %}">
       <p class="text-xs font-medium {% if day == today %}text-indigo-100{% else %}text-gray-400{% endif %}">
@@ -459,6 +459,9 @@ function escHtml(s) {
     email:     ['bg-yellow-100 text-yellow-700','Email'],
   };
 
+  // Module-level drag state — avoids relying on custom dataTransfer MIME types
+  let activeDrag = null; // { meetingId, fromMissed, sourceDate }
+
   // ── Build a calendar meeting card element ──────────────────────────
   function buildMeetingCard(d) {
     const [badgeCls, badgeLabel] = TYPE_BADGE[d.meeting_type] || ['',''];
@@ -501,47 +504,61 @@ function escHtml(s) {
   // ── Wire a draggable card (calendar or missed) ─────────────────────
   function wireCard(card) {
     card.addEventListener('dragstart', e => {
+      const sourceZone = card.closest('.meetings-drop-zone');
+      activeDrag = {
+        meetingId:  card.dataset.meetingId,
+        fromMissed: card.classList.contains('missed-meeting-card'),
+        sourceDate: sourceZone ? sourceZone.dataset.date : '',
+      };
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', card.dataset.meetingId);
-      // Store source info in extra data fields
-      const zone = card.closest('.meetings-drop-zone');
-      e.dataTransfer.setData('application/source-date', zone ? zone.dataset.date : '');
-      e.dataTransfer.setData('application/is-missed', card.classList.contains('missed-meeting-card') ? '1' : '0');
       setTimeout(() => { card.style.opacity = '0.35'; }, 0);
     });
-    card.addEventListener('dragend', () => { card.style.opacity = ''; });
+    card.addEventListener('dragend', () => {
+      card.style.opacity = '';
+      activeDrag = null;
+    });
   }
 
   // Wire all existing cards
   document.querySelectorAll('.calendar-meeting-card, .missed-meeting-card').forEach(wireCard);
 
-  // ── Wire drop zones ────────────────────────────────────────────────
-  document.querySelectorAll('.meetings-drop-zone').forEach(zone => {
-    zone.addEventListener('dragenter', e => { e.preventDefault(); });
+  // ── Wire drop zones (entire day column, not just the inner meetings list) ──
+  document.querySelectorAll('.cal-day-col').forEach(col => {
+    // Inner zone used for DOM manipulation and visual highlight
+    const zone = col.querySelector('.meetings-drop-zone');
 
-    zone.addEventListener('dragover', e => {
+    col.addEventListener('dragenter', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      zone.style.background = '#eef2ff';
-      zone.style.boxShadow  = 'inset 0 0 0 2px #a5b4fc';
     });
 
-    zone.addEventListener('dragleave', e => {
-      if (!zone.contains(e.relatedTarget)) {
+    col.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (zone) {
+        zone.style.background = '#eef2ff';
+        zone.style.boxShadow  = 'inset 0 0 0 2px #a5b4fc';
+      }
+    });
+
+    col.addEventListener('dragleave', e => {
+      if (!col.contains(e.relatedTarget) && zone) {
         zone.style.background = '';
         zone.style.boxShadow  = '';
       }
     });
 
-    zone.addEventListener('drop', async e => {
+    col.addEventListener('drop', async e => {
       e.preventDefault();
-      zone.style.background = '';
-      zone.style.boxShadow  = '';
+      if (zone) {
+        zone.style.background = '';
+        zone.style.boxShadow  = '';
+      }
 
-      const meetingId  = e.dataTransfer.getData('text/plain');
-      const targetDate = zone.dataset.date;
-      const sourceDate = e.dataTransfer.getData('application/source-date');
-      const fromMissed = e.dataTransfer.getData('application/is-missed') === '1';
+      if (!activeDrag) return;
+      const { meetingId, fromMissed, sourceDate } = activeDrag;
+      const targetDate = col.dataset.date;
       if (!meetingId || !targetDate) return;
       if (!fromMissed && sourceDate === targetDate) return; // same column
 
@@ -573,10 +590,12 @@ function escHtml(s) {
           }
         }
 
-        // Add new card to target zone
-        const emptyMsg = zone.querySelector('.no-meetings-msg');
-        if (emptyMsg) emptyMsg.remove();
-        zone.appendChild(buildMeetingCard(data));
+        // Add new card to the inner meetings list
+        if (zone) {
+          const emptyMsg = zone.querySelector('.no-meetings-msg');
+          if (emptyMsg) emptyMsg.remove();
+          zone.appendChild(buildMeetingCard(data));
+        }
 
       } catch (err) {
         alert('Network error. Please try again.');
