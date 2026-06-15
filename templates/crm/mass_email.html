@@ -4,21 +4,9 @@
 
 {% block content %}
 
-{% if sent %}
-  {% if success_count %}
-    <div class="mb-4 bg-green-50 border border-green-200 rounded-xl px-5 py-3 flex items-center gap-3">
-      <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-      <span class="text-sm text-green-800 font-medium">Sent to {{ success_count }} recipient{{ success_count|pluralize }}.{% if failed_recipients %} Failed: {{ failed_recipients|join:", " }}{% endif %}</span>
-    </div>
-  {% else %}
-    <div class="mb-4 bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-sm text-red-800 font-medium">
-      All sends failed. Check your SMTP configuration.
-    </div>
-  {% endif %}
-{% endif %}
-
 {% if error %}
-  <div class="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 text-sm text-amber-800 font-medium">
+  <div class="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 text-sm text-amber-800 font-medium flex items-center gap-3">
+    <svg class="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
     {{ error }}
   </div>
 {% endif %}
@@ -158,27 +146,54 @@
     </div><!-- end right col -->
   </div><!-- end grid -->
 
-  <!-- ── Sticky send bar ────────────────────────────────────────────────── -->
-  <div class="bg-white rounded-xl border border-gray-200 px-6 py-4 flex items-center gap-6">
-    <!-- Preview -->
-    <div class="flex-1 min-w-0 space-y-0.5">
-      <div class="text-xs text-gray-400">
-        From: <span id="preview-from" class="font-semibold text-gray-700">simon@altitudeinteractiveweb.com</span>
+  <!-- ── Send bar ─────────────────────────────────────────────────────────── -->
+  {% if sent and success_count %}
+    <!-- Success state -->
+    <div class="bg-green-600 rounded-xl px-6 py-5 flex items-center gap-5">
+      <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
       </div>
-      <div class="text-xs text-gray-400 truncate">
-        Subject: <span id="preview-subject" class="font-semibold text-gray-700 italic">—</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-white font-semibold text-base">Email sent successfully</p>
+        <p class="text-green-100 text-sm mt-0.5">
+          Delivered to {{ success_count }} recipient{{ success_count|pluralize }}
+          {% if failed_recipients %} · Failed: {{ failed_recipients|join:", " }}{% endif %}
+        </p>
+      </div>
+      <a href="{% url 'mass_email' %}"
+        class="flex-shrink-0 inline-flex items-center gap-2 rounded-md bg-white/20 hover:bg-white/30 px-4 py-2 text-sm font-semibold text-white">
+        Send another
+      </a>
+    </div>
+  {% elif sent and not success_count %}
+    <!-- All failed state -->
+    <div class="bg-red-600 rounded-xl px-6 py-5 flex items-center gap-5">
+      <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </div>
+      <div class="flex-1">
+        <p class="text-white font-semibold text-base">Send failed</p>
+        <p class="text-red-100 text-sm mt-0.5">Check your SMTP credentials in Heroku config. Failed: {{ failed_recipients|join:", " }}</p>
       </div>
     </div>
-    <!-- Count + button -->
-    <div class="flex items-center gap-4 flex-shrink-0">
-      <span id="recipient-summary" class="text-sm text-gray-500"></span>
-      <button type="submit" id="send-btn"
-        class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        Send Email
-      </button>
+  {% else %}
+    <!-- Normal send bar -->
+    <div class="bg-white rounded-xl border border-gray-200 px-6 py-4 flex items-center gap-6">
+      <div class="flex-1 min-w-0 space-y-0.5">
+        <div class="text-xs text-gray-400">From: <span id="preview-from" class="font-semibold text-gray-700">simon@altitudeinteractiveweb.com</span></div>
+        <div class="text-xs text-gray-400 truncate">Subject: <span id="preview-subject" class="font-semibold text-gray-700 italic">—</span></div>
+      </div>
+      <div class="flex items-center gap-4 flex-shrink-0">
+        <span id="recipient-summary" class="text-sm text-gray-500"></span>
+        <button type="submit" id="send-btn"
+          class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none">
+          <svg id="send-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <svg id="send-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+          <span id="send-label">Send Email</span>
+        </button>
+      </div>
     </div>
-  </div>
+  {% endif %}
 
 </form>
 
@@ -327,7 +342,19 @@
     const crmChecked = document.querySelectorAll('.contact-checkbox:checked').length;
     const total = crmChecked + extraEmails.length;
     if (total === 0) return;
-    if (!confirm('Send to ' + total + ' recipient' + (total === 1 ? '' : 's') + '?')) e.preventDefault();
+    if (!confirm('Send to ' + total + ' recipient' + (total === 1 ? '' : 's') + '?')) {
+      e.preventDefault();
+      return;
+    }
+    // Show loading state
+    const btn = document.getElementById('send-btn');
+    if (btn) {
+      document.getElementById('send-icon').classList.add('hidden');
+      document.getElementById('send-spinner').classList.remove('hidden');
+      document.getElementById('send-label').textContent = 'Sending…';
+      btn.disabled = true;
+      btn.classList.add('opacity-75', 'cursor-not-allowed');
+    }
   });
 </script>
 {% endblock %}
