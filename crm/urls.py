@@ -26,4 +26,5 @@ urlpatterns = [
     path('todo/new/', views.todo_block_create, name='todo_block_create'),
     path('todo/<int:pk>/delete/', views.todo_block_delete, name='todo_block_delete'),
     path('email/', views.mass_email, name='mass_email'),
+    path('email/saved/<int:pk>/delete/', views.saved_recipient_delete, name='saved_recipient_delete'),
 ]

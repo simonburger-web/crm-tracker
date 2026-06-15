@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.db.models import Q, Sum, Count
-from .models import Contact, Deal, Note, Meeting, TodoBlock
+from .models import Contact, Deal, Note, Meeting, TodoBlock, SavedRecipient
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
 
 
@@ -567,8 +567,8 @@ def leads_generator(request):
 
 
 def mass_email(request):
-    # Contacts that have an email address, ordered by name
     contacts_with_email = Contact.objects.exclude(email='').exclude(email__isnull=True).order_by('name')
+    saved_recipients = SavedRecipient.objects.all()
 
     success_count = 0
     failed_recipients = []
@@ -584,6 +584,7 @@ def mass_email(request):
         subject = request.POST.get('subject', '').strip()
         message = request.POST.get('message', '').strip()
         contact_ids = request.POST.getlist('contact_ids')
+        saved_emails = request.POST.getlist('saved_recipient_emails')
         extra_emails_raw = request.POST.get('extra_emails', '').strip()
         from_email = request.POST.get('from_email', '').strip()
         if from_email not in ALLOWED_FROM:
@@ -594,11 +595,13 @@ def mass_email(request):
         if contact_ids:
             selected = Contact.objects.filter(pk__in=contact_ids).exclude(email='').exclude(email__isnull=True)
             recipients += [c.email for c in selected]
+        recipients += [e.strip() for e in saved_emails if e.strip()]
         if extra_emails_raw:
             for addr in extra_emails_raw.replace(',', '\n').splitlines():
                 addr = addr.strip()
                 if addr and '@' in addr:
                     recipients.append(addr)
+
         # Deduplicate while preserving order
         seen = set()
         unique_recipients = []
@@ -622,10 +625,26 @@ def mass_email(request):
                     failed_recipients.append(recipient)
             sent = True
 
+            # Save any new external emails (from extra_emails field) for future use
+            if extra_emails_raw:
+                for addr in extra_emails_raw.replace(',', '\n').splitlines():
+                    addr = addr.strip().lower()
+                    if addr and '@' in addr:
+                        SavedRecipient.objects.get_or_create(email=addr)
+            saved_recipients = SavedRecipient.objects.all()
+
     return render(request, 'crm/mass_email.html', {
         'contacts_with_email': contacts_with_email,
+        'saved_recipients': saved_recipients,
         'success_count': success_count,
         'failed_recipients': failed_recipients,
         'error': error,
         'sent': sent,
     })
+
+
+def saved_recipient_delete(request, pk):
+    recipient = get_object_or_404(SavedRecipient, pk=pk)
+    if request.method == 'POST':
+        recipient.delete()
+    return redirect('mass_email')

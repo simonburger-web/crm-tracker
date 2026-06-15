@@ -106,6 +106,18 @@ class TodoBlock(models.Model):
         return f"{self.title} ({self.date} {self.start_time:%H:%M}–{self.end_time:%H:%M})"
 
 
+class SavedRecipient(models.Model):
+    email = models.EmailField(unique=True)
+    label = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['email']
+
+    def __str__(self):
+        return self.label or self.email
+
+
 class Note(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)
     deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)
