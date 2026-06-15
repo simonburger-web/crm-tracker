@@ -3,152 +3,189 @@
 {% block page_title %}Mass Email{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl space-y-6">
 
-  {% if sent %}
-    {% if success_count %}
-      <div class="bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-start gap-3">
-        <svg class="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        <div class="text-sm text-green-800">
-          <span class="font-semibold">Sent successfully to {{ success_count }} recipient{{ success_count|pluralize }}.</span>
-          {% if failed_recipients %}
-            <br>Failed to send to: {{ failed_recipients|join:", " }}
-          {% endif %}
+{% if sent %}
+  {% if success_count %}
+    <div class="mb-4 bg-green-50 border border-green-200 rounded-xl px-5 py-3 flex items-center gap-3">
+      <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      <span class="text-sm text-green-800 font-medium">Sent to {{ success_count }} recipient{{ success_count|pluralize }}.{% if failed_recipients %} Failed: {{ failed_recipients|join:", " }}{% endif %}</span>
+    </div>
+  {% else %}
+    <div class="mb-4 bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-sm text-red-800 font-medium">
+      All sends failed. Check your SMTP configuration.
+    </div>
+  {% endif %}
+{% endif %}
+
+{% if error %}
+  <div class="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 text-sm text-amber-800 font-medium">
+    {{ error }}
+  </div>
+{% endif %}
+
+<form method="post" id="mass-email-form" class="flex flex-col gap-4">
+  {% csrf_token %}
+
+  <!-- ── Two-column workspace ───────────────────────────────────────────── -->
+  <div class="grid grid-cols-[1fr_400px] gap-4 items-start">
+
+    <!-- LEFT: Compose -->
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+        <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+        <h2 class="text-sm font-semibold text-gray-900">Compose</h2>
+      </div>
+
+      <div class="p-6 space-y-4">
+
+        <!-- From + Subject on one row -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="id_from_email" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">From</label>
+            <select name="from_email" id="id_from_email" class="form-input text-sm" onchange="updatePreview()">
+              <option value="simon@altitudeinteractiveweb.com" {% if request.POST.from_email == 'simon@altitudeinteractiveweb.com' or not request.POST.from_email %}selected{% endif %}>Simon</option>
+              <option value="tristan@altitudeinteractiveweb.com" {% if request.POST.from_email == 'tristan@altitudeinteractiveweb.com' %}selected{% endif %}>Tristan</option>
+            </select>
+          </div>
+          <div>
+            <label for="id_subject" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Subject</label>
+            <input type="text" name="subject" id="id_subject" class="form-input text-sm"
+                   placeholder="Email subject…" value="{{ request.POST.subject|default:'' }}" oninput="updatePreview()">
+          </div>
         </div>
-      </div>
-    {% else %}
-      <div class="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-800">
-        <span class="font-semibold">All sends failed.</span> Failed recipients: {{ failed_recipients|join:", " }}
-      </div>
-    {% endif %}
-  {% endif %}
 
-  {% if error %}
-    <div class="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-800 font-medium">
-      {{ error }}
-    </div>
-  {% endif %}
+        <!-- Message -->
+        <div>
+          <label for="id_message" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Message</label>
+          <textarea name="message" id="id_message" rows="16" class="form-input text-sm resize-none"
+                    placeholder="Write your email message here…">{{ request.POST.message|default:'' }}</textarea>
+        </div>
 
-  <form method="post" id="mass-email-form">
-    {% csrf_token %}
-
-    <!-- Subject + Message -->
-    <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-      <h2 class="text-base font-semibold text-gray-900">Compose Email</h2>
-
-      <div>
-        <label for="id_from_email" class="block text-sm font-medium text-gray-700 mb-1">From</label>
-        <select name="from_email" id="id_from_email" class="form-input">
-          <option value="simon@altitudeinteractiveweb.com" {% if request.POST.from_email == 'simon@altitudeinteractiveweb.com' or not request.POST.from_email %}selected{% endif %}>Simon — simon@altitudeinteractiveweb.com</option>
-          <option value="tristan@altitudeinteractiveweb.com" {% if request.POST.from_email == 'tristan@altitudeinteractiveweb.com' %}selected{% endif %}>Tristan — tristan@altitudeinteractiveweb.com</option>
-        </select>
-      </div>
-
-      <div>
-        <label for="id_subject" class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-        <input type="text" name="subject" id="id_subject" class="form-input"
-               placeholder="Enter email subject…" value="{{ request.POST.subject|default:'' }}">
-      </div>
-
-      <div>
-        <label for="id_message" class="block text-sm font-medium text-gray-700 mb-1">Message</label>
-        <textarea name="message" id="id_message" rows="10" class="form-input"
-                  placeholder="Write your email message here…">{{ request.POST.message|default:'' }}</textarea>
       </div>
     </div>
 
-    <!-- Recipients -->
-    <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-5 mt-6">
-      <div class="flex items-center justify-between">
-        <h2 class="text-base font-semibold text-gray-900">Recipients</h2>
-        <span id="selected-count" class="text-sm text-gray-500">0 contacts selected</span>
+    <!-- RIGHT: Recipients -->
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div class="flex items-center gap-3">
+          <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+          <h2 class="text-sm font-semibold text-gray-900">Recipients</h2>
+        </div>
+        <span id="total-badge" class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full">0 selected</span>
       </div>
 
+      <!-- CRM Contacts subsection -->
       {% if contacts_with_email %}
-        <!-- Search + filter bar -->
-        <div class="flex gap-3">
-          <input type="text" id="contact-search" class="form-input" placeholder="Search contacts…">
-          <select id="region-filter" class="form-input w-40">
-            <option value="">All regions</option>
+      <div class="px-4 pt-3 pb-2 border-b border-gray-100 space-y-2">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">From CRM</p>
+        <!-- Search + filter -->
+        <div class="flex gap-2">
+          <input type="text" id="contact-search" class="form-input text-sm py-1.5" placeholder="Search…">
+          <select id="region-filter" class="form-input text-sm py-1.5 w-28 flex-shrink-0">
+            <option value="">All</option>
             <option value="us">US</option>
             <option value="sa">SA</option>
           </select>
         </div>
-
-        <!-- Select / deselect all -->
-        <div class="flex items-center gap-4">
-          <button type="button" onclick="selectAll()" class="btn-secondary text-xs px-3 py-1.5">Select all</button>
-          <button type="button" onclick="deselectAll()" class="btn-secondary text-xs px-3 py-1.5">Deselect all</button>
+        <!-- Select / deselect -->
+        <div class="flex gap-2">
+          <button type="button" onclick="selectAll()"
+            class="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Select all</button>
+          <button type="button" onclick="deselectAll()"
+            class="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Deselect all</button>
+          <span id="crm-count" class="ml-auto text-xs text-gray-400 self-center">0 selected</span>
         </div>
+      </div>
 
-        <!-- Contact list -->
-        <div id="contact-list" class="divide-y divide-gray-100 border border-gray-200 rounded-lg max-h-72 overflow-y-auto">
-          {% for contact in contacts_with_email %}
-            <label class="contact-row flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer"
-                   data-name="{{ contact.name|lower }}"
-                   data-company="{{ contact.company|lower }}"
-                   data-email="{{ contact.email|lower }}"
-                   data-region="{{ contact.region }}">
-              <input type="checkbox" name="contact_ids" value="{{ contact.pk }}"
-                     class="contact-checkbox h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-gray-900 truncate">{{ contact.name }}</div>
-                <div class="text-xs text-gray-500 truncate">{{ contact.email }}{% if contact.company %} · {{ contact.company }}{% endif %}</div>
-              </div>
-              <span class="text-xs text-gray-400 uppercase tracking-wide flex-shrink-0">{{ contact.get_region_display }}</span>
-            </label>
-          {% endfor %}
-        </div>
+      <!-- Contact rows -->
+      <div id="contact-list" class="overflow-y-auto divide-y divide-gray-50" style="max-height: 260px">
+        {% for contact in contacts_with_email %}
+          <label class="contact-row flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer"
+                 data-name="{{ contact.name|lower }}"
+                 data-company="{{ contact.company|lower }}"
+                 data-email="{{ contact.email|lower }}"
+                 data-region="{{ contact.region }}">
+            <input type="checkbox" name="contact_ids" value="{{ contact.pk }}"
+                   class="contact-checkbox h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 flex-shrink-0">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-800 truncate leading-tight">{{ contact.name }}</div>
+              <div class="text-xs text-gray-400 truncate">{{ contact.email }}</div>
+            </div>
+            <span class="flex-shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded
+              {% if contact.region == 'us' %}bg-blue-50 text-blue-600{% else %}bg-amber-50 text-amber-600{% endif %}">
+              {{ contact.region|upper }}
+            </span>
+          </label>
+        {% endfor %}
+      </div>
       {% else %}
-        <p class="text-sm text-gray-500">No contacts with email addresses yet. Add email addresses to your contacts first.</p>
+        <div class="px-5 py-4 text-sm text-gray-400">No contacts with email addresses yet.</div>
       {% endif %}
 
-      <!-- Extra recipients -->
-      <div class="space-y-3">
-        <label class="block text-sm font-medium text-gray-700">Additional recipients</label>
+      <!-- Add external recipients subsection -->
+      <div class="px-4 pt-3 pb-4 border-t border-gray-100 space-y-3">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Add external recipients</p>
 
-        <!-- Manual add -->
+        <!-- Manual input -->
         <div class="flex gap-2">
-          <input type="text" id="manual-email-input" class="form-input" placeholder="name@example.com"
-                 autocomplete="off" inputmode="email">
-          <button type="button" onclick="addManualEmail()" class="btn-secondary flex-shrink-0">Add</button>
+          <input type="text" id="manual-email-input" class="form-input text-sm py-1.5 min-w-0"
+                 placeholder="name@example.com" autocomplete="off" inputmode="email">
+          <button type="button" onclick="addManualEmail()"
+            class="flex-shrink-0 text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700">Add</button>
         </div>
 
         <!-- File upload -->
         <div class="flex items-center gap-3">
-          <label for="email-file-input" class="btn-secondary cursor-pointer flex-shrink-0 gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-            Upload .txt file
+          <label for="email-file-input"
+            class="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium cursor-pointer flex-shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Import .txt
           </label>
           <input type="file" id="email-file-input" accept=".txt,text/plain" class="hidden">
-          <span id="file-status" class="text-xs text-gray-400"></span>
+          <span id="file-status" class="text-xs text-gray-400 truncate"></span>
         </div>
 
-        <!-- Tag list -->
-        <div id="extra-email-tags" class="flex flex-wrap gap-2 min-h-[2rem]"></div>
-        <p id="no-extras-hint" class="text-xs text-gray-400">No additional recipients added yet.</p>
+        <!-- Tags -->
+        <div id="extra-email-tags" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto"></div>
+        <p id="no-extras-hint" class="text-xs text-gray-300">None added yet.</p>
 
-        <!-- Hidden field submitted to server -->
+        <!-- Hidden field -->
         <textarea name="extra_emails" id="id_extra_emails" class="hidden">{{ request.POST.extra_emails|default:'' }}</textarea>
       </div>
-    </div>
 
-    <!-- Send button -->
-    <div class="mt-6 flex items-center gap-4">
-      <button type="submit" class="btn-primary gap-2" id="send-btn">
+    </div><!-- end right col -->
+  </div><!-- end grid -->
+
+  <!-- ── Sticky send bar ────────────────────────────────────────────────── -->
+  <div class="bg-white rounded-xl border border-gray-200 px-6 py-4 flex items-center gap-6">
+    <!-- Preview -->
+    <div class="flex-1 min-w-0 space-y-0.5">
+      <div class="text-xs text-gray-400">
+        From: <span id="preview-from" class="font-semibold text-gray-700">simon@altitudeinteractiveweb.com</span>
+      </div>
+      <div class="text-xs text-gray-400 truncate">
+        Subject: <span id="preview-subject" class="font-semibold text-gray-700 italic">—</span>
+      </div>
+    </div>
+    <!-- Count + button -->
+    <div class="flex items-center gap-4 flex-shrink-0">
+      <span id="recipient-summary" class="text-sm text-gray-500"></span>
+      <button type="submit" id="send-btn"
+        class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
         Send Email
       </button>
-      <span id="recipient-summary" class="text-sm text-gray-500"></span>
     </div>
-  </form>
-</div>
+  </div>
+
+</form>
 
 <script>
-  // ── Extra emails list (tag-based) ────────────────────────────────────────
+  // ── Extra emails (tag list) ───────────────────────────────────────────────
   let extraEmails = [];
 
-  // Pre-populate from a server re-render (validation error bounce-back)
   (function () {
     const existing = document.getElementById('id_extra_emails').value.trim();
     if (existing) {
@@ -165,8 +202,7 @@
 
   function addEmail(addr) {
     addr = addr.trim().toLowerCase();
-    if (!addr || !isValidEmail(addr)) return false;
-    if (extraEmails.includes(addr)) return false;
+    if (!addr || !isValidEmail(addr) || extraEmails.includes(addr)) return false;
     extraEmails.push(addr);
     renderTags();
     syncHiddenField();
@@ -186,9 +222,10 @@
     const hint = document.getElementById('no-extras-hint');
     container.innerHTML = '';
     extraEmails.forEach(addr => {
+      const safeAddr = addr.replace(/'/g, "\\'");
       const tag = document.createElement('span');
-      tag.className = 'inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-medium rounded-full px-3 py-1';
-      tag.innerHTML = `${addr} <button type="button" onclick="removeEmail('${addr}')" class="text-indigo-400 hover:text-indigo-700 leading-none">&times;</button>`;
+      tag.className = 'inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-0.5';
+      tag.innerHTML = `${addr} <button type="button" onclick="removeEmail('${safeAddr}')" class="text-indigo-400 hover:text-indigo-700 text-sm leading-none ml-0.5">&times;</button>`;
       container.appendChild(tag);
     });
     hint.style.display = extraEmails.length ? 'none' : '';
@@ -198,25 +235,18 @@
     document.getElementById('id_extra_emails').value = extraEmails.join('\n');
   }
 
-  // Manual add
   function addManualEmail() {
     const input = document.getElementById('manual-email-input');
-    // Support comma/newline pasted input
     const parts = input.value.replace(/,/g, '\n').split('\n');
-    let added = 0;
-    parts.forEach(p => { if (addEmail(p)) added++; });
+    parts.forEach(p => addEmail(p));
     input.value = '';
     input.focus();
   }
 
   document.getElementById('manual-email-input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      addManualEmail();
-    }
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addManualEmail(); }
   });
 
-  // File upload
   document.getElementById('email-file-input').addEventListener('change', function() {
     const file = this.files[0];
     if (!file) return;
@@ -224,34 +254,32 @@
     statusEl.textContent = 'Reading…';
     const reader = new FileReader();
     reader.onload = function(e) {
-      const text = e.target.result;
-      // Extract anything that looks like an email address
-      const found = text.match(/[^\s,;<>()[\]"]+@[^\s,;<>()[\]"]+\.[^\s,;<>()[\]"]+/g) || [];
+      const found = (e.target.result.match(/[^\s,;<>()[\]"]+@[^\s,;<>()[\]"]+\.[^\s,;<>()[\]"]+/g) || []);
       let added = 0;
       found.forEach(addr => { if (addEmail(addr)) added++; });
-      statusEl.textContent = added + ' address' + (added === 1 ? '' : 'es') + ' added from ' + file.name;
-      // Reset so the same file can be re-uploaded if needed
+      statusEl.textContent = added + ' address' + (added === 1 ? '' : 'es') + ' added';
       document.getElementById('email-file-input').value = '';
     };
     reader.readAsText(file);
   });
 
-  // ── Contact checkbox counter ─────────────────────────────────────────────
-  const rows = document.querySelectorAll('.contact-row');
-  const countEl = document.getElementById('selected-count');
-  const summaryEl = document.getElementById('recipient-summary');
-
+  // ── Counts ────────────────────────────────────────────────────────────────
   function updateCount() {
-    const checked = document.querySelectorAll('.contact-checkbox:checked').length;
-    countEl.textContent = checked + ' contact' + (checked === 1 ? '' : 's') + ' selected';
-    const total = checked + extraEmails.length;
-    summaryEl.textContent = total > 0 ? total + ' total recipient' + (total === 1 ? '' : 's') : '';
+    const crmChecked = document.querySelectorAll('.contact-checkbox:checked').length;
+    const total = crmChecked + extraEmails.length;
+
+    document.getElementById('crm-count').textContent = crmChecked + ' selected';
+    document.getElementById('total-badge').textContent = total + ' selected';
+    document.getElementById('recipient-summary').textContent =
+      total > 0 ? total + ' recipient' + (total === 1 ? '' : 's') : 'No recipients yet';
   }
 
   document.querySelectorAll('.contact-checkbox').forEach(cb => cb.addEventListener('change', updateCount));
+  updateCount();
 
+  // ── Select / deselect ────────────────────────────────────────────────────
   function selectAll() {
-    rows.forEach(row => {
+    document.querySelectorAll('.contact-row').forEach(row => {
       if (row.style.display !== 'none') row.querySelector('.contact-checkbox').checked = true;
     });
     updateCount();
@@ -262,15 +290,12 @@
     updateCount();
   }
 
-  // ── Search + region filter ───────────────────────────────────────────────
+  // ── Search + filter ───────────────────────────────────────────────────────
   function applyFilters() {
     const q = document.getElementById('contact-search').value.toLowerCase();
     const region = document.getElementById('region-filter').value;
-    rows.forEach(row => {
-      const matchesSearch = !q ||
-        row.dataset.name.includes(q) ||
-        row.dataset.company.includes(q) ||
-        row.dataset.email.includes(q);
+    document.querySelectorAll('.contact-row').forEach(row => {
+      const matchesSearch = !q || row.dataset.name.includes(q) || row.dataset.company.includes(q) || row.dataset.email.includes(q);
       const matchesRegion = !region || row.dataset.region === region;
       row.style.display = (matchesSearch && matchesRegion) ? '' : 'none';
     });
@@ -279,15 +304,30 @@
   document.getElementById('contact-search').addEventListener('input', applyFilters);
   document.getElementById('region-filter').addEventListener('change', applyFilters);
 
-  // ── Confirm + sync before submit ─────────────────────────────────────────
+  // ── Send bar live preview ─────────────────────────────────────────────────
+  const FROM_LABELS = {
+    'simon@altitudeinteractiveweb.com': 'Simon (simon@altitudeinteractiveweb.com)',
+    'tristan@altitudeinteractiveweb.com': 'Tristan (tristan@altitudeinteractiveweb.com)',
+  };
+
+  function updatePreview() {
+    const fromVal = document.getElementById('id_from_email').value;
+    const subject = document.getElementById('id_subject').value.trim();
+    document.getElementById('preview-from').textContent = FROM_LABELS[fromVal] || fromVal;
+    document.getElementById('preview-subject').textContent = subject || '—';
+  }
+
+  document.getElementById('id_from_email').addEventListener('change', updatePreview);
+  document.getElementById('id_subject').addEventListener('input', updatePreview);
+  updatePreview();
+
+  // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('mass-email-form').addEventListener('submit', function(e) {
     syncHiddenField();
-    const checked = document.querySelectorAll('.contact-checkbox:checked').length;
-    const total = checked + extraEmails.length;
+    const crmChecked = document.querySelectorAll('.contact-checkbox:checked').length;
+    const total = crmChecked + extraEmails.length;
     if (total === 0) return;
-    if (!confirm('Send this email to ' + total + ' recipient' + (total === 1 ? '' : 's') + '?')) {
-      e.preventDefault();
-    }
+    if (!confirm('Send to ' + total + ' recipient' + (total === 1 ? '' : 's') + '?')) e.preventDefault();
   });
 </script>
 {% endblock %}
