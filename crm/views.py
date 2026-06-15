@@ -3,6 +3,7 @@ import os
 import json
 import urllib.parse
 import urllib.request
+from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
@@ -562,4 +563,69 @@ def leads_generator(request):
         'imported_count': imported_count,
         'token_configured': bool(os.environ.get('LEADS_GENERATOR_API_TOKEN', '').strip()),
         'country_label': country_label,
+    })
+
+
+def mass_email(request):
+    # Contacts that have an email address, ordered by name
+    contacts_with_email = Contact.objects.exclude(email='').exclude(email__isnull=True).order_by('name')
+
+    success_count = 0
+    failed_recipients = []
+    error = None
+    sent = False
+
+    ALLOWED_FROM = {
+        'simon@altitudeinteractiveweb.com',
+        'tristan@altitudeinteractiveweb.com',
+    }
+
+    if request.method == 'POST':
+        subject = request.POST.get('subject', '').strip()
+        message = request.POST.get('message', '').strip()
+        contact_ids = request.POST.getlist('contact_ids')
+        extra_emails_raw = request.POST.get('extra_emails', '').strip()
+        from_email = request.POST.get('from_email', '').strip()
+        if from_email not in ALLOWED_FROM:
+            from_email = 'simon@altitudeinteractiveweb.com'
+
+        # Build recipient list
+        recipients = []
+        if contact_ids:
+            selected = Contact.objects.filter(pk__in=contact_ids).exclude(email='').exclude(email__isnull=True)
+            recipients += [c.email for c in selected]
+        if extra_emails_raw:
+            for addr in extra_emails_raw.replace(',', '\n').splitlines():
+                addr = addr.strip()
+                if addr and '@' in addr:
+                    recipients.append(addr)
+        # Deduplicate while preserving order
+        seen = set()
+        unique_recipients = []
+        for r in recipients:
+            if r.lower() not in seen:
+                seen.add(r.lower())
+                unique_recipients.append(r)
+
+        if not subject:
+            error = 'Subject is required.'
+        elif not message:
+            error = 'Message body is required.'
+        elif not unique_recipients:
+            error = 'Add at least one recipient.'
+        else:
+            for recipient in unique_recipients:
+                try:
+                    send_mail(subject, message, from_email, [recipient], fail_silently=False)
+                    success_count += 1
+                except Exception:
+                    failed_recipients.append(recipient)
+            sent = True
+
+    return render(request, 'crm/mass_email.html', {
+        'contacts_with_email': contacts_with_email,
+        'success_count': success_count,
+        'failed_recipients': failed_recipients,
+        'error': error,
+        'sent': sent,
     })

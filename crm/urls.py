@@ -25,4 +25,5 @@ urlpatterns = [
     path('leads/generator/', views.leads_generator, name='leads_generator'),
     path('todo/new/', views.todo_block_create, name='todo_block_create'),
     path('todo/<int:pk>/delete/', views.todo_block_delete, name='todo_block_delete'),
+    path('email/', views.mass_email, name='mass_email'),
 ]
