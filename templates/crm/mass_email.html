@@ -104,11 +104,32 @@
       {% endif %}
 
       <!-- Extra recipients -->
-      <div>
-        <label for="id_extra_emails" class="block text-sm font-medium text-gray-700 mb-1">Additional recipients</label>
-        <textarea name="extra_emails" id="id_extra_emails" rows="3" class="form-input"
-                  placeholder="Enter email addresses separated by commas or new lines…">{{ request.POST.extra_emails|default:'' }}</textarea>
-        <p class="text-xs text-gray-400 mt-1">These are in addition to any contacts selected above.</p>
+      <div class="space-y-3">
+        <label class="block text-sm font-medium text-gray-700">Additional recipients</label>
+
+        <!-- Manual add -->
+        <div class="flex gap-2">
+          <input type="text" id="manual-email-input" class="form-input" placeholder="name@example.com"
+                 autocomplete="off" inputmode="email">
+          <button type="button" onclick="addManualEmail()" class="btn-secondary flex-shrink-0">Add</button>
+        </div>
+
+        <!-- File upload -->
+        <div class="flex items-center gap-3">
+          <label for="email-file-input" class="btn-secondary cursor-pointer flex-shrink-0 gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Upload .txt file
+          </label>
+          <input type="file" id="email-file-input" accept=".txt,text/plain" class="hidden">
+          <span id="file-status" class="text-xs text-gray-400"></span>
+        </div>
+
+        <!-- Tag list -->
+        <div id="extra-email-tags" class="flex flex-wrap gap-2 min-h-[2rem]"></div>
+        <p id="no-extras-hint" class="text-xs text-gray-400">No additional recipients added yet.</p>
+
+        <!-- Hidden field submitted to server -->
+        <textarea name="extra_emails" id="id_extra_emails" class="hidden">{{ request.POST.extra_emails|default:'' }}</textarea>
       </div>
     </div>
 
@@ -124,6 +145,98 @@
 </div>
 
 <script>
+  // ── Extra emails list (tag-based) ────────────────────────────────────────
+  let extraEmails = [];
+
+  // Pre-populate from a server re-render (validation error bounce-back)
+  (function () {
+    const existing = document.getElementById('id_extra_emails').value.trim();
+    if (existing) {
+      existing.replace(/,/g, '\n').split('\n').forEach(e => {
+        const addr = e.trim();
+        if (addr && addr.includes('@')) addEmail(addr);
+      });
+    }
+  })();
+
+  function isValidEmail(addr) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
+  }
+
+  function addEmail(addr) {
+    addr = addr.trim().toLowerCase();
+    if (!addr || !isValidEmail(addr)) return false;
+    if (extraEmails.includes(addr)) return false;
+    extraEmails.push(addr);
+    renderTags();
+    syncHiddenField();
+    updateCount();
+    return true;
+  }
+
+  function removeEmail(addr) {
+    extraEmails = extraEmails.filter(e => e !== addr);
+    renderTags();
+    syncHiddenField();
+    updateCount();
+  }
+
+  function renderTags() {
+    const container = document.getElementById('extra-email-tags');
+    const hint = document.getElementById('no-extras-hint');
+    container.innerHTML = '';
+    extraEmails.forEach(addr => {
+      const tag = document.createElement('span');
+      tag.className = 'inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-medium rounded-full px-3 py-1';
+      tag.innerHTML = `${addr} <button type="button" onclick="removeEmail('${addr}')" class="text-indigo-400 hover:text-indigo-700 leading-none">&times;</button>`;
+      container.appendChild(tag);
+    });
+    hint.style.display = extraEmails.length ? 'none' : '';
+  }
+
+  function syncHiddenField() {
+    document.getElementById('id_extra_emails').value = extraEmails.join('\n');
+  }
+
+  // Manual add
+  function addManualEmail() {
+    const input = document.getElementById('manual-email-input');
+    // Support comma/newline pasted input
+    const parts = input.value.replace(/,/g, '\n').split('\n');
+    let added = 0;
+    parts.forEach(p => { if (addEmail(p)) added++; });
+    input.value = '';
+    input.focus();
+  }
+
+  document.getElementById('manual-email-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addManualEmail();
+    }
+  });
+
+  // File upload
+  document.getElementById('email-file-input').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById('file-status');
+    statusEl.textContent = 'Reading…';
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const text = e.target.result;
+      // Extract anything that looks like an email address
+      const found = text.match(/[^\s,;<>()[\]"]+@[^\s,;<>()[\]"]+\.[^\s,;<>()[\]"]+/g) || [];
+      let added = 0;
+      found.forEach(addr => { if (addEmail(addr)) added++; });
+      statusEl.textContent = added + ' address' + (added === 1 ? '' : 'es') + ' added from ' + file.name;
+      // Reset so the same file can be re-uploaded if needed
+      document.getElementById('email-file-input').value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  // ── Contact checkbox counter ─────────────────────────────────────────────
   const rows = document.querySelectorAll('.contact-row');
   const countEl = document.getElementById('selected-count');
   const summaryEl = document.getElementById('recipient-summary');
@@ -131,21 +244,15 @@
   function updateCount() {
     const checked = document.querySelectorAll('.contact-checkbox:checked').length;
     countEl.textContent = checked + ' contact' + (checked === 1 ? '' : 's') + ' selected';
-    const extra = document.getElementById('id_extra_emails').value
-      .replace(/,/g, '\n').split('\n')
-      .map(s => s.trim()).filter(s => s && s.includes('@')).length;
-    const total = checked + extra;
+    const total = checked + extraEmails.length;
     summaryEl.textContent = total > 0 ? total + ' total recipient' + (total === 1 ? '' : 's') : '';
   }
 
   document.querySelectorAll('.contact-checkbox').forEach(cb => cb.addEventListener('change', updateCount));
-  document.getElementById('id_extra_emails').addEventListener('input', updateCount);
 
   function selectAll() {
     rows.forEach(row => {
-      if (row.style.display !== 'none') {
-        row.querySelector('.contact-checkbox').checked = true;
-      }
+      if (row.style.display !== 'none') row.querySelector('.contact-checkbox').checked = true;
     });
     updateCount();
   }
@@ -155,7 +262,7 @@
     updateCount();
   }
 
-  // Search + region filter
+  // ── Search + region filter ───────────────────────────────────────────────
   function applyFilters() {
     const q = document.getElementById('contact-search').value.toLowerCase();
     const region = document.getElementById('region-filter').value;
@@ -172,14 +279,12 @@
   document.getElementById('contact-search').addEventListener('input', applyFilters);
   document.getElementById('region-filter').addEventListener('change', applyFilters);
 
-  // Confirm before sending
+  // ── Confirm + sync before submit ─────────────────────────────────────────
   document.getElementById('mass-email-form').addEventListener('submit', function(e) {
+    syncHiddenField();
     const checked = document.querySelectorAll('.contact-checkbox:checked').length;
-    const extra = document.getElementById('id_extra_emails').value
-      .replace(/,/g, '\n').split('\n')
-      .map(s => s.trim()).filter(s => s && s.includes('@')).length;
-    const total = checked + extra;
-    if (total === 0) return; // let server-side validation handle it
+    const total = checked + extraEmails.length;
+    if (total === 0) return;
     if (!confirm('Send this email to ' + total + ' recipient' + (total === 1 ? '' : 's') + '?')) {
       e.preventDefault();
     }
