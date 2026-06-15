@@ -647,4 +647,5 @@ def saved_recipient_delete(request, pk):
     recipient = get_object_or_404(SavedRecipient, pk=pk)
     if request.method == 'POST':
         recipient.delete()
-    return redirect('mass_email')
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False}, status=405)

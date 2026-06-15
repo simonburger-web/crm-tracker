@@ -128,10 +128,8 @@
                 {% if sr.label %}<div class="text-sm font-medium text-gray-800 truncate leading-tight">{{ sr.label }}</div>{% endif %}
                 <div class="text-xs text-gray-400 truncate">{{ sr.email }}</div>
               </div>
-              <form method="post" action="{% url 'saved_recipient_delete' sr.pk %}" class="flex-shrink-0">
-                {% csrf_token %}
-                <button type="submit" class="text-gray-300 hover:text-red-400 p-1" title="Remove">&times;</button>
-              </form>
+              <button type="button" onclick="deleteSaved({{ sr.pk }}, this)"
+                class="text-gray-300 hover:text-red-400 p-1 flex-shrink-0" title="Remove">&times;</button>
             </div>
           {% endfor %}
         </div>
@@ -364,6 +362,13 @@
   document.getElementById('id_from_email').addEventListener('change', updatePreview);
   document.getElementById('id_subject').addEventListener('input', updatePreview);
   updatePreview();
+
+  // ── Delete saved recipient (avoids nested form) ───────────────────────────
+  function deleteSaved(pk, btn) {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    fetch(`/email/saved/${pk}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
+      .then(r => { if (r.ok || r.redirected) btn.closest('div.flex').remove(); updateCount(); });
+  }
 
   // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('mass-email-form').addEventListener('submit', function(e) {
