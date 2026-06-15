@@ -368,13 +368,6 @@
   // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('mass-email-form').addEventListener('submit', function(e) {
     syncHiddenField();
-    const crmChecked = document.querySelectorAll('.contact-checkbox:checked').length;
-    const total = crmChecked + extraEmails.length;
-    if (total === 0) return;
-    if (!confirm('Send to ' + total + ' recipient' + (total === 1 ? '' : 's') + '?')) {
-      e.preventDefault();
-      return;
-    }
     // Show loading state
     const btn = document.getElementById('send-btn');
     if (btn) {
