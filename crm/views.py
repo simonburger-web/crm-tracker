@@ -1,14 +1,17 @@
 from datetime import date, datetime, timedelta
 import os
 import json
+import time
+import random
 import urllib.parse
 import urllib.request
+from urllib.parse import quote, unquote
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.db.models import Q, Sum, Count
-from .models import Contact, Deal, Note, Meeting, TodoBlock, SavedRecipient
+from .models import Contact, Deal, Note, Meeting, TodoBlock, SavedRecipient, Unsubscribe
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
 
 
@@ -574,6 +577,8 @@ def mass_email(request):
     failed_recipients = []
     error = None
     sent = False
+    skipped_count = 0
+    remaining_count = 0
 
     ALLOWED_FROM = {
         'simon@altitudeinteractiveweb.com',
@@ -590,11 +595,14 @@ def mass_email(request):
         if from_email not in ALLOWED_FROM:
             from_email = 'simon@altitudeinteractiveweb.com'
 
-        # Build recipient list
+        # Build recipient list and contact lookup for personalisation
         recipients = []
+        email_to_contact = {}
         if contact_ids:
             selected = Contact.objects.filter(pk__in=contact_ids).exclude(email='').exclude(email__isnull=True)
-            recipients += [c.email for c in selected]
+            for c in selected:
+                recipients.append(c.email)
+                email_to_contact[c.email.lower()] = c
         recipients += [e.strip() for e in saved_emails if e.strip()]
         if extra_emails_raw:
             for addr in extra_emails_raw.replace(',', '\n').splitlines():
@@ -617,12 +625,45 @@ def mass_email(request):
         elif not unique_recipients:
             error = 'Add at least one recipient.'
         else:
-            for recipient in unique_recipients:
+            # Filter unsubscribed
+            unsubscribed_emails = set(Unsubscribe.objects.values_list('email', flat=True))
+            filtered = [r for r in unique_recipients if r.lower() not in unsubscribed_emails]
+            skipped_count = len(unique_recipients) - len(filtered)
+            unique_recipients = filtered
+
+            # Hard cap at 40
+            if len(unique_recipients) > 40:
+                remaining_count = len(unique_recipients) - 40
+                unique_recipients = unique_recipients[:40]
+
+            for i, recipient in enumerate(unique_recipients):
+                contact = email_to_contact.get(recipient.lower())
+                if contact:
+                    name = contact.name or 'there'
+                    company = contact.company or 'your business'
+                else:
+                    name = 'there'
+                    company = 'your business'
+
+                personalised = message.replace('{name}', name).replace('{company}', company)
+                footer = (
+                    f"\n\n---\n"
+                    f"Altitude Interactive (Pty) Ltd, 8 Jamaican Music Avenue, "
+                    f"Pretoria, 0081, South Africa\n"
+                    f"Don't want these emails? Unsubscribe here: "
+                    f"https://yoursite.com/unsubscribe/{quote(recipient)}/"
+                )
+                full_message = personalised + footer
+
                 try:
-                    send_mail(subject, message, from_email, [recipient], fail_silently=False)
+                    send_mail(subject, full_message, from_email, [recipient], fail_silently=False)
                     success_count += 1
                 except Exception:
                     failed_recipients.append(recipient)
+
+                if i < len(unique_recipients) - 1:
+                    time.sleep(random.uniform(4, 8))
+
             sent = True
 
             # Save any new external emails (from extra_emails field) for future use
@@ -640,7 +681,15 @@ def mass_email(request):
         'failed_recipients': failed_recipients,
         'error': error,
         'sent': sent,
+        'skipped_count': skipped_count,
+        'remaining_count': remaining_count,
     })
+
+
+def unsubscribe(request, email):
+    decoded = unquote(email)
+    Unsubscribe.objects.get_or_create(email=decoded.lower())
+    return render(request, 'crm/unsubscribed.html', {'email': decoded})
 
 
 def saved_recipient_delete(request, pk):

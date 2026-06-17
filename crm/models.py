@@ -118,6 +118,17 @@ class SavedRecipient(models.Model):
         return self.label or self.email
 
 
+class Unsubscribe(models.Model):
+    email = models.EmailField(unique=True)
+    unsubscribed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-unsubscribed_at']
+
+    def __str__(self):
+        return self.email
+
+
 class Note(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)
     deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name='notes', null=True, blank=True)

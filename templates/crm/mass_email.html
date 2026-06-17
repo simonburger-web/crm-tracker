@@ -46,7 +46,8 @@
         <div>
           <label for="id_message" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">Message</label>
           <textarea name="message" id="id_message" rows="16" class="form-input text-sm resize-none"
-                    placeholder="Write your email message here…">{{ request.POST.message|default:'' }}</textarea>
+                    placeholder="Write your email message here… Use {name} and {company} for personalisation.">{{ request.POST.message|default:'' }}</textarea>
+          <p class="mt-1.5 text-xs text-gray-400">A physical address and unsubscribe link will be added automatically before sending.</p>
         </div>
 
       </div>
@@ -180,7 +181,12 @@
       <div class="flex-1 min-w-0">
         <p class="text-white font-semibold text-base">Email sent successfully</p>
         <p class="text-green-100 text-sm mt-0.5">
-          Delivered to {{ success_count }} recipient{{ success_count|pluralize }}
+          {% if remaining_count %}
+            {{ success_count }} of {{ success_count|add:remaining_count }} sent this run — run again to send to the remaining {{ remaining_count }}.
+          {% else %}
+            Delivered to {{ success_count }} recipient{{ success_count|pluralize }}.
+          {% endif %}
+          {% if skipped_count %} · {{ skipped_count }} skipped (unsubscribed).{% endif %}
           {% if failed_recipients %} · Failed: {{ failed_recipients|join:", " }}{% endif %}
         </p>
       </div>
