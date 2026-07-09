@@ -21,9 +21,14 @@ _COUNTRY_CONFIG = {
 }
 
 
-def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max_results: int = 25, country: str = 'us'):
+def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max_results: int = 25, country: str = 'us', website_filter: str = 'no_website'):
     """
-    Fetch businesses matching filters, ideally restricted to "no website".
+    Fetch businesses matching filters.
+
+    website_filter:
+      'no_website'   — only businesses without a website
+      'any'          — all businesses regardless of website
+      'with_website' — only businesses that have a website
 
     This is intentionally implemented as a provider hook. You need to decide which
     provider/API this project uses (the token must NOT be committed).
@@ -31,7 +36,7 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
     Expected return format: list[dict] with keys:
       - name (str)
       - phone (str|None)
-      - website (str|None)  (should be None/'' for "no website")
+      - website (str|None)
       - address (str|None)
       - source_id (str|None) (provider id)
     """
@@ -99,8 +104,10 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
                 break
 
             website = _extract_website(r)
-            if website:
-                continue  # we only want "no website" leads
+            if website_filter == 'no_website' and website:
+                continue
+            if website_filter == 'with_website' and not website:
+                continue
 
             source_id = str(r.get('data_id') or r.get('place_id') or r.get('data_cid') or '').strip()
             if source_id and source_id in seen:
@@ -118,7 +125,7 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
                 'name': title,
                 'company': title,
                 'phone': phone,
-                'website': '',
+                'website': website,
                 'address': (r.get('address') or '').strip(),
                 'source_id': source_id,
             })
@@ -530,6 +537,7 @@ def leads_generator(request):
                         city=cd.get('city') or '',
                         max_results=cd.get('max_results') or 25,
                         country=country,
+                        website_filter=cd.get('website_filter') or 'no_website',
                     )
                     # Defensive normalization for the template/session
                     inactive_phones = set(

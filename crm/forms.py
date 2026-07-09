@@ -91,6 +91,12 @@ class LeadsGeneratorForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. San Diego or Cape Town'}),
         label='City (optional)',
     )
+    WEBSITE_FILTER_CHOICES = [
+        ('no_website', 'No website'),
+        ('any', 'Any'),
+        ('with_website', 'With website'),
+    ]
+
     max_results = forms.IntegerField(
         required=False,
         initial=25,
@@ -98,4 +104,10 @@ class LeadsGeneratorForm(forms.Form):
         max_value=500,
         widget=forms.NumberInput(attrs={'class': 'form-input'}),
         label='Max Results',
+    )
+    website_filter = forms.ChoiceField(
+        choices=WEBSITE_FILTER_CHOICES,
+        initial='no_website',
+        widget=forms.Select(attrs={'class': 'form-input'}),
+        label='Website',
     )
