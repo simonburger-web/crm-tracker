@@ -962,21 +962,20 @@ SCHOOLS = [
 
 created = skipped = 0
 for name, phone, email, note_body in SCHOOLS:
-    contact, was_created = Contact.objects.get_or_create(
-        name=name,
-        defaults={
-            'company': 'Driving School',
-            'phone': phone,
-            'email': email,
-            'status': 'lead',
-            'region': 'sa',
-        }
-    )
-    if was_created:
-        if note_body:
-            Note.objects.create(contact=contact, body=note_body)
-        created += 1
-    else:
+    exists = Contact.objects.filter(name=name, region='sa').exists()
+    if exists:
         skipped += 1
+        continue
+    contact = Contact.objects.create(
+        name=name,
+        company='Driving School',
+        phone=phone,
+        email=email,
+        status='lead',
+        region='sa',
+    )
+    if note_body:
+        Note.objects.create(contact=contact, body=note_body)
+    created += 1
 
 print(f"Done. Created: {created}, Skipped (existing): {skipped}")
