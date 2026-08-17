@@ -163,7 +163,7 @@ def _filter_contacts(request, queryset):
         queryset = queryset.filter(Q(name__icontains=q) | Q(email__icontains=q) | Q(company__icontains=q))
     if status:
         queryset = queryset.filter(status=status)
-    return queryset, q, status
+    return queryset.prefetch_related('deals'), q, status
 
 
 def contact_list(request):
@@ -178,7 +178,95 @@ def contact_list(request):
     })
 
 
+def _duplicate_phone_ids(region):
+    """Return a set of Contact PKs that are active but share a phone with:
+    - another active contact in the same region, OR
+    - any inactive contact (any region).
+    """
+    from django.db.models import Count
+
+    # Phones that appear more than once among active contacts in this region
+    active_dup_phones = set(
+        Contact.objects.filter(region=region)
+        .exclude(status='inactive')
+        .exclude(phone='')
+        .values('phone')
+        .annotate(n=Count('id'))
+        .filter(n__gt=1)
+        .values_list('phone', flat=True)
+    )
+
+    # Phones belonging to any inactive contact
+    inactive_phones = set(
+        Contact.objects.filter(status='inactive')
+        .exclude(phone='')
+        .values_list('phone', flat=True)
+    )
+
+    all_flagged_phones = active_dup_phones | inactive_phones
+
+    if not all_flagged_phones:
+        return set()
+
+    return set(
+        Contact.objects.filter(region=region, phone__in=all_flagged_phones)
+        .exclude(status='inactive')
+        .values_list('id', flat=True)
+    )
+
+
+def _dedup_phones(region):
+    """Delete active contacts in the region whose phone matches:
+    - an inactive contact (any region) — always deleted, inactive takes precedence, OR
+    - another active contact in the same region — keep oldest, delete the rest.
+    Returns count of deleted contacts.
+    """
+    from django.db.models import Count
+
+    inactive_phones = set(
+        Contact.objects.filter(status='inactive')
+        .exclude(phone='')
+        .values_list('phone', flat=True)
+    )
+
+    deleted = 0
+
+    # Delete active contacts that share a phone with an inactive contact
+    if inactive_phones:
+        to_delete = Contact.objects.filter(region=region, phone__in=inactive_phones).exclude(status='inactive')
+        deleted += to_delete.count()
+        to_delete.delete()
+
+    # Among remaining active contacts, deduplicate by phone (keep oldest)
+    active_dup_phones = (
+        Contact.objects.filter(region=region)
+        .exclude(status='inactive')
+        .exclude(phone='')
+        .values('phone')
+        .annotate(n=Count('id'))
+        .filter(n__gt=1)
+        .values_list('phone', flat=True)
+    )
+    for phone in active_dup_phones:
+        dupes = list(
+            Contact.objects.filter(region=region, phone=phone)
+            .exclude(status='inactive')
+            .order_by('created_at')
+        )
+        for contact in dupes[1:]:
+            contact.delete()
+            deleted += 1
+
+    return deleted
+
+
 def us_leads(request):
+    if request.method == 'POST' and request.POST.get('action') == 'dedup_phones':
+        deleted = _dedup_phones('us')
+        from django.contrib import messages
+        messages.success(request, f'Removed {deleted} duplicate phone entr{"y" if deleted == 1 else "ies"}.')
+        return redirect('us_leads')
+
     contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='us').exclude(status='inactive'))
     return render(request, 'crm/region_leads.html', {
         'contacts': contacts,
@@ -188,10 +276,17 @@ def us_leads(request):
         'region': 'us',
         'region_label': 'US Leads',
         'clear_url': 'us_leads',
+        'duplicate_phone_ids': _duplicate_phone_ids('us'),
     })
 
 
 def sa_leads(request):
+    if request.method == 'POST' and request.POST.get('action') == 'dedup_phones':
+        deleted = _dedup_phones('sa')
+        from django.contrib import messages
+        messages.success(request, f'Removed {deleted} duplicate phone entr{"y" if deleted == 1 else "ies"}.')
+        return redirect('sa_leads')
+
     contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa').exclude(status='inactive'))
     return render(request, 'crm/region_leads.html', {
         'contacts': contacts,
@@ -201,6 +296,7 @@ def sa_leads(request):
         'region': 'sa',
         'region_label': 'SA Leads',
         'clear_url': 'sa_leads',
+        'duplicate_phone_ids': _duplicate_phone_ids('sa'),
     })
 
 
@@ -505,7 +601,10 @@ def leads_generator(request):
                 # Skip if already exists as inactive (any region)
                 if phone and Contact.objects.filter(phone=phone, status='inactive').exists():
                     continue
-                # Skip if an active duplicate already exists
+                # Skip if any active lead already has this phone number
+                if phone and Contact.objects.filter(phone=phone).exclude(status='inactive').exists():
+                    continue
+                # Skip if an active duplicate already exists (same name/company/region)
                 exists = Contact.objects.filter(
                     name=name,
                     phone=phone,

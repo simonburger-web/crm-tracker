@@ -3,6 +3,13 @@
 {% block title %}{{ region_label }} — CRM Tracker{% endblock %}
 {% block page_title %}{{ region_label }}{% endblock %}
 {% block header_actions %}
+  {% if duplicate_phone_ids %}
+  <form method="post" class="inline" onsubmit="return confirm('Delete all but the oldest contact for each duplicate phone number?');">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="dedup_phones">
+    <button type="submit" class="btn-secondary text-red-600 border-red-300 hover:border-red-500">Remove phone duplicates ({{ duplicate_phone_ids|length }})</button>
+  </form>
+  {% endif %}
   <a href="{% url 'contact_create' %}?region={{ region }}" class="btn-primary">+ Add Lead</a>
 {% endblock %}
 
@@ -72,13 +79,18 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for contact in contacts %}
-      <tr class="hover:bg-gray-50">
+      <tr class="hover:bg-gray-50{% if contact.pk in duplicate_phone_ids %} bg-red-50{% endif %}">
         <td class="px-6 py-4">
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ contact.name }}</a>
         </td>
         <td class="px-6 py-4 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
         <td class="px-6 py-4 text-sm text-gray-600">{{ contact.email|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.phone|default:"—" }}</td>
+        <td class="px-6 py-4 text-sm text-gray-600">
+          {{ contact.phone|default:"—" }}
+          {% if contact.pk in duplicate_phone_ids %}
+          <span class="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">duplicate</span>
+          {% endif %}
+        </td>
         <td class="px-6 py-4">
           <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
             {% if contact.status == 'customer' %}bg-green-100 text-green-800
