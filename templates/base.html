@@ -53,6 +53,10 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Calendar
       </a>
+      <a href="{% url 'driveops' %}" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if 'driveops' in request.resolver_match.url_name %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422A12.083 12.083 0 0121 15c0 4.97-4.03 9-9 9s-9-4.03-9-9c0-1.28.25-2.5.697-3.617L12 14z"/></svg>
+        DriveOps
+      </a>
       <a href="{% url 'leads_generator' %}" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'leads_generator' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5h2m-1 0v14m-7-7h14"/></svg>
         Leads Generator

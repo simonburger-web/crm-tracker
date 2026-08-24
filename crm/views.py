@@ -573,6 +573,69 @@ def note_delete(request, pk):
     return render(request, 'crm/note_confirm_delete.html', {'note': note})
 
 
+def driveops_view(request):
+    q = request.GET.get('q', '')
+    status = request.GET.get('status', '')
+    contacts = Contact.objects.filter(
+        company__icontains='driving school'
+    ).exclude(status='inactive')
+    if q:
+        contacts = contacts.filter(Q(name__icontains=q) | Q(company__icontains=q) | Q(phone__icontains=q))
+    if status:
+        contacts = contacts.filter(status=status)
+    return render(request, 'crm/driveops.html', {
+        'contacts': contacts,
+        'q': q,
+        'status': status,
+        'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
+    })
+
+
+def driveops_schedule(request, pk):
+    """AJAX: create a calendar entry (Meeting) for a DriveOps contact."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    contact = get_object_or_404(Contact, pk=pk)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    meeting_type = data.get('meeting_type', 'call')
+    date_str = data.get('date', '')
+    time_str = data.get('time', '')
+    if not date_str or not time_str:
+        return JsonResponse({'error': 'Date and time are required'}, status=400)
+    if meeting_type not in ('call', 'video'):
+        meeting_type = 'call'
+    try:
+        scheduled_at = datetime.strptime(f'{date_str} {time_str}', '%Y-%m-%d %H:%M')
+    except ValueError:
+        return JsonResponse({'error': 'Invalid date/time format'}, status=400)
+    type_label = 'Call' if meeting_type == 'call' else 'Video Call'
+    meeting = Meeting.objects.create(
+        title=f'{type_label} with {contact.name}',
+        contact=contact,
+        meeting_type=meeting_type,
+        scheduled_at=scheduled_at,
+    )
+    return JsonResponse({
+        'ok': True,
+        'meeting_id': meeting.pk,
+        'title': meeting.title,
+        'scheduled_at': meeting.scheduled_at.strftime('%Y-%m-%d %H:%M'),
+    })
+
+
+def driveops_deactivate(request, pk):
+    """AJAX: mark a DriveOps contact as inactive."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    contact = get_object_or_404(Contact, pk=pk)
+    contact.status = 'inactive'
+    contact.save()
+    return JsonResponse({'ok': True, 'contact_id': pk})
+
+
 def leads_generator(request):
     """
     Leads Generator: fetch businesses with no websites, then import as leads for the selected country.
