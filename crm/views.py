@@ -611,6 +611,8 @@ def driveops_schedule(request, pk):
         scheduled_at = datetime.strptime(f'{date_str} {time_str}', '%Y-%m-%d %H:%M')
     except ValueError:
         return JsonResponse({'error': 'Invalid date/time format'}, status=400)
+    contact.status = 'call_back' if meeting_type == 'call' else 'prospect'
+    contact.save()
     type_label = 'Call' if meeting_type == 'call' else 'Video Call'
     meeting = Meeting.objects.create(
         title=f'{type_label} with {contact.name}',
