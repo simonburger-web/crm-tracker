@@ -287,7 +287,7 @@ def sa_leads(request):
         messages.success(request, f'Removed {deleted} duplicate phone entr{"y" if deleted == 1 else "ies"}.')
         return redirect('sa_leads')
 
-    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa').exclude(status='inactive'))
+    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa').exclude(status='inactive').exclude(company__icontains='driving school'))
     return render(request, 'crm/region_leads.html', {
         'contacts': contacts,
         'q': q,
