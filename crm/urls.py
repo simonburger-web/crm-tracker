@@ -26,6 +26,7 @@ urlpatterns = [
     path('todo/new/', views.todo_block_create, name='todo_block_create'),
     path('todo/<int:pk>/delete/', views.todo_block_delete, name='todo_block_delete'),
     path('driveops/', views.driveops_view, name='driveops'),
+    path('driveops/analytics/', views.driveops_analytics, name='driveops_analytics'),
     path('driveops/schedule/<int:pk>/', views.driveops_schedule, name='driveops_schedule'),
     path('driveops/deactivate/<int:pk>/', views.driveops_deactivate, name='driveops_deactivate'),
     path('email/', views.mass_email, name='mass_email'),

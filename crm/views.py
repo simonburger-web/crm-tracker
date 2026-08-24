@@ -11,7 +11,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.db.models import Q, Sum, Count
-from .models import Contact, Deal, Note, Meeting, TodoBlock, SavedRecipient, Unsubscribe
+from .models import Contact, Deal, Note, Meeting, TodoBlock, SavedRecipient, Unsubscribe, ContactStatusLog
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
 
 
@@ -625,6 +625,103 @@ def driveops_schedule(request, pk):
         'meeting_id': meeting.pk,
         'title': meeting.title,
         'scheduled_at': meeting.scheduled_at.strftime('%Y-%m-%d %H:%M'),
+    })
+
+
+def driveops_analytics(request):
+    from django.utils import timezone
+    today = timezone.localdate()
+    now = timezone.now()
+    start_of_today = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+
+    ds_contacts = Contact.objects.filter(company__icontains='driving school')
+
+    # ── Current status breakdown ────────────────────────────────
+    current_leads     = ds_contacts.filter(status='lead').count()
+    current_callbacks = ds_contacts.filter(status='call_back').count()
+    current_prospects = ds_contacts.filter(status='prospect').count()
+    current_inactive  = ds_contacts.filter(status='inactive').count()
+    current_customers = ds_contacts.filter(status='customer').count()
+    total_active      = ds_contacts.exclude(status='inactive').count()
+
+    # ── Today's status change activity ──────────────────────────
+    # Only look at logs for driving-school contacts
+    ds_pks = list(ds_contacts.values_list('pk', flat=True))
+    today_logs = ContactStatusLog.objects.filter(
+        contact_id__in=ds_pks,
+        changed_at__gte=start_of_today,
+    )
+    converted_to_callback_today = today_logs.filter(to_status='call_back').count()
+    converted_to_prospect_today = today_logs.filter(to_status='prospect').count()
+    converted_to_inactive_today = today_logs.filter(to_status='inactive').count()
+    # Start-of-day leads = current leads + everything that moved OUT of lead today
+    moved_out_of_lead_today = today_logs.filter(from_status='lead').count()
+    start_of_day_leads = current_leads + moved_out_of_lead_today
+
+    # ── Callback queue with duration ────────────────────────────
+    callback_contacts = ds_contacts.filter(status='call_back').order_by('updated_at')
+    callback_queue = []
+    for c in callback_contacts:
+        # Find most recent log entry that set this contact to call_back
+        log_entry = ContactStatusLog.objects.filter(
+            contact=c, to_status='call_back'
+        ).order_by('-changed_at').first()
+        since = log_entry.changed_at if log_entry else c.updated_at
+        delta = now - since
+        days = delta.days
+        hours = delta.seconds // 3600
+        if days > 0:
+            duration_str = f'{days}d {hours}h'
+        elif hours > 0:
+            duration_str = f'{hours}h {(delta.seconds % 3600) // 60}m'
+        else:
+            duration_str = f'{(delta.seconds % 3600) // 60}m'
+        callback_queue.append({'contact': c, 'since': since, 'duration': duration_str, 'days': days})
+
+    # ── Prospect queue with duration ────────────────────────────
+    prospect_contacts = ds_contacts.filter(status='prospect').order_by('updated_at')
+    prospect_queue = []
+    for c in prospect_contacts:
+        log_entry = ContactStatusLog.objects.filter(
+            contact=c, to_status='prospect'
+        ).order_by('-changed_at').first()
+        since = log_entry.changed_at if log_entry else c.updated_at
+        delta = now - since
+        days = delta.days
+        hours = delta.seconds // 3600
+        duration_str = f'{days}d {hours}h' if days > 0 else (f'{hours}h' if hours > 0 else f'{(delta.seconds % 3600) // 60}m')
+        prospect_queue.append({'contact': c, 'since': since, 'duration': duration_str, 'days': days})
+
+    # ── 7-day daily activity ─────────────────────────────────────
+    seven_days = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        day_start = timezone.make_aware(datetime.combine(day, datetime.min.time()))
+        day_end   = timezone.make_aware(datetime.combine(day + timedelta(days=1), datetime.min.time()))
+        day_logs  = ContactStatusLog.objects.filter(contact_id__in=ds_pks, changed_at__gte=day_start, changed_at__lt=day_end)
+        seven_days.append({
+            'date': day,
+            'label': day.strftime('%a %-d %b') if day != today else 'Today',
+            'to_callback': day_logs.filter(to_status='call_back').count(),
+            'to_prospect': day_logs.filter(to_status='prospect').count(),
+            'to_inactive': day_logs.filter(to_status='inactive').count(),
+        })
+
+    return render(request, 'crm/driveops_analytics.html', {
+        'today': today,
+        'start_of_day_leads': start_of_day_leads,
+        'current_leads': current_leads,
+        'current_callbacks': current_callbacks,
+        'current_prospects': current_prospects,
+        'current_inactive': current_inactive,
+        'current_customers': current_customers,
+        'total_active': total_active,
+        'converted_to_callback_today': converted_to_callback_today,
+        'converted_to_prospect_today': converted_to_prospect_today,
+        'converted_to_inactive_today': converted_to_inactive_today,
+        'callback_queue': callback_queue,
+        'prospect_queue': prospect_queue,
+        'seven_days': seven_days,
     })
 
 

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}DriveOps Analytics — CRM Tracker{% endblock %}
+{% block page_title %}DriveOps Analytics{% endblock %}
+
+{% block header_actions %}
+  <a href="{% url 'driveops' %}" class="btn-secondary">← Back to DriveOps</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Today's headline stats -->
+<div class="mb-6">
+  <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Today — {{ today|date:"l, j F Y" }}</p>
+  <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Leads at start of day</p>
+      <p class="text-3xl font-bold text-gray-900">{{ start_of_day_leads }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Leads now</p>
+      <p class="text-3xl font-bold text-gray-900">{{ current_leads }}</p>
+      {% if start_of_day_leads > 0 %}
+        {% with diff=start_of_day_leads|add:"-"|add:current_leads %}
+        {% if converted_to_callback_today or converted_to_prospect_today or converted_to_inactive_today %}
+        <p class="text-xs text-green-600 mt-1">↓ {{ converted_to_callback_today|add:converted_to_prospect_today|add:converted_to_inactive_today }} moved out</p>
+        {% endif %}
+        {% endwith %}
+      {% endif %}
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">→ Callback today</p>
+      <p class="text-3xl font-bold text-indigo-600">{{ converted_to_callback_today }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">→ Prospect today</p>
+      <p class="text-3xl font-bold text-blue-600">{{ converted_to_prospect_today }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">→ Inactive today</p>
+      <p class="text-3xl font-bold text-gray-400">{{ converted_to_inactive_today }}</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Total active</p>
+      <p class="text-3xl font-bold text-gray-900">{{ total_active }}</p>
+      <p class="text-xs text-gray-400 mt-1">excl. inactive</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- Current pipeline breakdown -->
+<div class="mb-6">
+  <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Current Pipeline</p>
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    {% with total=total_active %}
+    <div class="space-y-3">
+
+      <div class="flex items-center gap-3">
+        <span class="w-28 text-sm text-gray-600 flex-shrink-0">Lead</span>
+        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+          {% if total > 0 %}
+          <div class="bg-yellow-400 h-4 rounded-full" style="width: {% widthratio current_leads total 100 %}%"></div>
+          {% endif %}
+        </div>
+        <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_leads }}</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="w-28 text-sm text-gray-600 flex-shrink-0">Call Back</span>
+        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+          {% if total > 0 %}
+          <div class="bg-indigo-500 h-4 rounded-full" style="width: {% widthratio current_callbacks total 100 %}%"></div>
+          {% endif %}
+        </div>
+        <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_callbacks }}</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="w-28 text-sm text-gray-600 flex-shrink-0">Prospect</span>
+        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+          {% if total > 0 %}
+          <div class="bg-blue-500 h-4 rounded-full" style="width: {% widthratio current_prospects total 100 %}%"></div>
+          {% endif %}
+        </div>
+        <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_prospects }}</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="w-28 text-sm text-gray-600 flex-shrink-0">Customer</span>
+        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+          {% if total > 0 %}
+          <div class="bg-green-500 h-4 rounded-full" style="width: {% widthratio current_customers total 100 %}%"></div>
+          {% endif %}
+        </div>
+        <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_customers }}</span>
+      </div>
+
+    </div>
+    {% endwith %}
+  </div>
+</div>
+
+<!-- 7-day activity -->
+<div class="mb-6">
+  <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Last 7 Days — Conversions</p>
+  <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Callback</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Prospect</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Inactive</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total moved</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for day in seven_days %}
+        <tr class="{% if day.date == today %}bg-indigo-50{% else %}hover:bg-gray-50{% endif %}">
+          <td class="px-6 py-3 text-sm font-medium text-gray-900">
+            {{ day.label }}{% if day.date == today %} <span class="ml-1 text-xs text-indigo-500">today</span>{% endif %}
+          </td>
+          <td class="px-6 py-3 text-sm text-indigo-700 font-medium">
+            {% if day.to_callback %}{{ day.to_callback }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+          </td>
+          <td class="px-6 py-3 text-sm text-blue-700 font-medium">
+            {% if day.to_prospect %}{{ day.to_prospect }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+          </td>
+          <td class="px-6 py-3 text-sm text-gray-400">
+            {% if day.to_inactive %}{{ day.to_inactive }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+          </td>
+          <td class="px-6 py-3 text-sm text-gray-700 font-semibold">
+            {% with total=day.to_callback|add:day.to_prospect|add:day.to_inactive %}
+            {% if total %}{{ total }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+            {% endwith %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Callback queue -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <div>
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+      Callback Queue <span class="text-gray-400 font-normal normal-case">({{ callback_queue|length }} leads)</span>
+    </p>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {% if callback_queue %}
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Waiting</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for item in callback_queue %}
+          <tr class="hover:bg-gray-50 {% if item.days >= 7 %}bg-red-50{% elif item.days >= 3 %}bg-yellow-50{% endif %}">
+            <td class="px-4 py-3">
+              <a href="{% url 'contact_detail' item.contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ item.contact.name }}</a>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
+            <td class="px-4 py-3">
+              <span class="text-sm font-medium {% if item.days >= 7 %}text-red-600{% elif item.days >= 3 %}text-yellow-700{% else %}text-gray-700{% endif %}">
+                {{ item.duration }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="px-6 py-8 text-center text-sm text-gray-400">No leads in callback queue.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+      Prospect Queue <span class="text-gray-400 font-normal normal-case">({{ prospect_queue|length }} leads)</span>
+    </p>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {% if prospect_queue %}
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">As prospect</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for item in prospect_queue %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3">
+              <a href="{% url 'contact_detail' item.contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ item.contact.name }}</a>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
+            <td class="px-4 py-3 text-sm font-medium text-blue-700">{{ item.duration }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="px-6 py-8 text-center text-sm text-gray-400">No prospects yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

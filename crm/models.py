@@ -140,3 +140,17 @@ class Note(models.Model):
 
     def __str__(self):
         return self.body[:50]
+
+
+class ContactStatusLog(models.Model):
+    """Records every status change on a Contact, for analytics."""
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='status_logs')
+    from_status = models.CharField(max_length=30, blank=True)
+    to_status = models.CharField(max_length=30)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f'{self.contact.name}: {self.from_status} → {self.to_status}'
