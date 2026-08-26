@@ -614,8 +614,9 @@ def driveops_schedule(request, pk):
     contact.status = 'call_back' if meeting_type == 'call' else 'prospect'
     contact.save()
     type_label = 'Call' if meeting_type == 'call' else 'Video Call'
+    title = data.get('title', '').strip() or f'{type_label} with {contact.name}'
     meeting = Meeting.objects.create(
-        title=f'{type_label} with {contact.name}',
+        title=title,
         contact=contact,
         meeting_type=meeting_type,
         scheduled_at=scheduled_at,
