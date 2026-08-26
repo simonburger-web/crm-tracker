@@ -13,7 +13,7 @@
   <form method="get" class="flex flex-wrap gap-3 w-full">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, company, phone..."
       class="form-input flex-1 min-w-48">
-    <select name="status" class="form-input w-40" onchange="this.form.submit()">
+    <select name="status" class="form-input w-48" onchange="this.form.submit()">
       <option value="">All statuses</option>
       {% for val, label in status_choices %}
       <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
@@ -37,17 +37,19 @@
     </thead>
     <tbody class="divide-y divide-gray-100" id="driveops-table-body">
       {% for contact in contacts %}
-      <tr class="hover:bg-gray-50" id="row-{{ contact.pk }}">
+      <tr class="hover:bg-gray-50" id="row-{{ contact.pk }}" data-status="{{ contact.status }}">
         <td class="px-6 py-4">
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ contact.name }}</a>
         </td>
         <td class="px-6 py-4 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
         <td class="px-6 py-4 text-sm text-gray-600">{{ contact.phone|default:"—" }}</td>
         <td class="px-6 py-4">
-          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+          <span id="badge-{{ contact.pk }}" class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
             {% if contact.status == 'customer' %}bg-green-100 text-green-800
             {% elif contact.status == 'prospect' %}bg-blue-100 text-blue-800
+            {% elif contact.status == 'prospect_1_week' %}bg-violet-100 text-violet-800
             {% elif contact.status == 'lead' %}bg-yellow-100 text-yellow-800
+            {% elif contact.status == 'call_back' %}bg-indigo-100 text-indigo-800
             {% else %}bg-gray-100 text-gray-600{% endif %}">
             {{ contact.get_status_display }}
           </span>
@@ -58,13 +60,13 @@
               onclick="openScheduleModal({{ contact.pk }}, '{{ contact.name|escapejs }}')"
               class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 focus:outline-none">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-              Create Calendar Entry
+              Schedule
             </button>
             <button
-              onclick="openInactiveModal({{ contact.pk }}, '{{ contact.name|escapejs }}')"
-              class="inline-flex items-center gap-1.5 rounded-md bg-white border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 focus:outline-none">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-              Inactive
+              onclick="openEditStatusModal({{ contact.pk }}, '{{ contact.name|escapejs }}', '{{ contact.status }}')"
+              class="inline-flex items-center gap-1.5 rounded-md bg-white border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 focus:outline-none">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              Edit Status
             </button>
           </div>
         </td>
@@ -115,23 +117,29 @@
   </div>
 </div>
 
-<!-- Inactive Confirmation Modal -->
-<div id="inactive-modal" class="fixed inset-0 z-50 hidden">
-  <div class="absolute inset-0 bg-black/40" onclick="closeInactiveModal()"></div>
+<!-- Edit Status Modal -->
+<div id="edit-status-modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40" onclick="closeEditStatusModal()"></div>
   <div class="absolute inset-0 flex items-center justify-center p-4">
     <div class="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-      <div class="flex items-center gap-3 mb-3">
-        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-          <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z"/></svg>
-        </div>
-        <h2 class="text-base font-semibold text-gray-900">Mark as Inactive?</h2>
+      <h2 class="text-base font-semibold text-gray-900 mb-1">Edit Status</h2>
+      <p class="text-sm text-gray-500 mb-5" id="edit-status-name"></p>
+
+      <div id="edit-status-prospect-1-week-note" class="hidden mb-4 rounded-md bg-violet-50 border border-violet-200 px-3 py-2 text-sm text-violet-800">
+        This lead is in <strong>Prospect — 1 Week</strong>. It will automatically become Inactive after 7 days. The only manual change allowed is to move them to <strong>Customer</strong>.
       </div>
-      <p class="text-sm text-gray-600 mb-5">
-        Move <strong id="inactive-contact-name"></strong> to Inactive Leads? This will remove them from DriveOps.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button onclick="closeInactiveModal()" class="btn-secondary">No, keep</button>
-        <button onclick="submitInactive()" class="btn-danger">Yes, mark inactive</button>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">New Status</label>
+        <select id="edit-status-select" class="form-input w-full"></select>
+      </div>
+
+      <div id="edit-status-error" class="hidden mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"></div>
+
+      <div class="mt-6 flex gap-3 justify-end">
+        <button onclick="closeEditStatusModal()" class="btn-secondary">Cancel</button>
+        <button id="edit-status-inactive-btn" onclick="submitMarkInactive()" class="hidden rounded-md bg-white border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50">Mark Inactive</button>
+        <button onclick="submitEditStatus()" id="edit-status-submit-btn" class="btn-primary">Save</button>
       </div>
     </div>
   </div>
@@ -139,14 +147,22 @@
 
 <script>
   var _scheduleContactPk = null;
-  var _inactiveContactPk = null;
+  var _editStatusContactPk = null;
+
+  var ALL_STATUSES = [
+    ['lead', 'Lead'],
+    ['call_back', 'Call Back'],
+    ['call_back_no_answer', 'Call Back — No Answer'],
+    ['prospect', 'Prospect'],
+    ['prospect_1_week', 'Prospect — 1 Week'],
+    ['customer', 'Customer'],
+  ];
 
   // ── Schedule modal ──────────────────────────────────────────
   function openScheduleModal(pk, name) {
     _scheduleContactPk = pk;
     document.getElementById('schedule-contact-name').textContent = name;
     document.getElementById('schedule-type').value = 'call';
-    // Default date = today, time = next full hour
     var now = new Date();
     var yyyy = now.getFullYear();
     var mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -199,6 +215,10 @@
         var typeLabel = meetingType === 'video' ? 'Video call' : 'Call';
         okEl.textContent = typeLabel + ' scheduled for ' + data.scheduled_at + '.';
         okEl.classList.remove('hidden');
+        // Update the row's badge to reflect new status from schedule action
+        var newStatus = meetingType === 'video' ? 'prospect' : 'call_back';
+        var newLabel = meetingType === 'video' ? 'Prospect' : 'Call Back';
+        updateRowBadge(pk, newStatus, newLabel);
         setTimeout(function() { closeScheduleModal(); }, 1800);
       } else {
         errEl.textContent = data.error || 'Something went wrong.';
@@ -213,40 +233,118 @@
     });
   }
 
-  // ── Inactive modal ──────────────────────────────────────────
-  function openInactiveModal(pk, name) {
-    _inactiveContactPk = pk;
-    document.getElementById('inactive-contact-name').textContent = name;
-    document.getElementById('inactive-modal').classList.remove('hidden');
+  // ── Edit Status modal ───────────────────────────────────────
+  function openEditStatusModal(pk, name, currentStatus) {
+    _editStatusContactPk = pk;
+    document.getElementById('edit-status-name').textContent = name;
+    document.getElementById('edit-status-error').classList.add('hidden');
+
+    var select = document.getElementById('edit-status-select');
+    select.innerHTML = '';
+
+    var note = document.getElementById('edit-status-prospect-1-week-note');
+    var inactiveBtn = document.getElementById('edit-status-inactive-btn');
+
+    if (currentStatus === 'prospect_1_week') {
+      note.classList.remove('hidden');
+      inactiveBtn.classList.add('hidden');
+      var opt = document.createElement('option');
+      opt.value = 'customer';
+      opt.textContent = 'Customer';
+      select.appendChild(opt);
+    } else {
+      note.classList.add('hidden');
+      inactiveBtn.classList.remove('hidden');
+      ALL_STATUSES.forEach(function(s) {
+        if (s[0] !== currentStatus) {
+          var opt = document.createElement('option');
+          opt.value = s[0];
+          opt.textContent = s[1];
+          select.appendChild(opt);
+        }
+      });
+    }
+
+    document.getElementById('edit-status-modal').classList.remove('hidden');
   }
 
-  function closeInactiveModal() {
-    document.getElementById('inactive-modal').classList.add('hidden');
-    _inactiveContactPk = null;
+  function closeEditStatusModal() {
+    document.getElementById('edit-status-modal').classList.add('hidden');
+    _editStatusContactPk = null;
   }
 
-  function submitInactive() {
-    var pk = _inactiveContactPk;
-    fetch('/driveops/deactivate/' + pk + '/', {
+  function submitEditStatus() {
+    var pk = _editStatusContactPk;
+    var newStatus = document.getElementById('edit-status-select').value;
+    sendStatusUpdate(pk, newStatus);
+  }
+
+  function submitMarkInactive() {
+    var pk = _editStatusContactPk;
+    sendStatusUpdate(pk, 'inactive');
+  }
+
+  function sendStatusUpdate(pk, newStatus) {
+    var errEl = document.getElementById('edit-status-error');
+    var btn = document.getElementById('edit-status-submit-btn');
+    errEl.classList.add('hidden');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    fetch('/driveops/status/' + pk + '/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-      body: '{}'
+      body: JSON.stringify({ status: newStatus })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      closeInactiveModal();
+      btn.disabled = false;
+      btn.textContent = 'Save';
       if (data.ok) {
-        var row = document.getElementById('row-' + pk);
-        if (row) {
-          row.style.transition = 'opacity 0.3s';
-          row.style.opacity = '0';
-          setTimeout(function() { row.remove(); }, 300);
+        if (newStatus === 'inactive') {
+          // Fade out and remove the row
+          var row = document.getElementById('row-' + pk);
+          if (row) {
+            row.style.transition = 'opacity 0.3s';
+            row.style.opacity = '0';
+            setTimeout(function() { row.remove(); }, 300);
+          }
+          closeEditStatusModal();
+        } else {
+          updateRowBadge(pk, data.status, data.status_display);
+          // Update data-status so re-opening the modal reflects new status
+          var row = document.getElementById('row-' + pk);
+          if (row) row.dataset.status = data.status;
+          closeEditStatusModal();
         }
+      } else {
+        errEl.textContent = data.error || 'Something went wrong.';
+        errEl.classList.remove('hidden');
       }
     })
     .catch(function() {
-      closeInactiveModal();
+      btn.disabled = false;
+      btn.textContent = 'Save';
+      errEl.textContent = 'Network error. Please try again.';
+      errEl.classList.remove('hidden');
     });
+  }
+
+  // ── Badge helper ────────────────────────────────────────────
+  var BADGE_CLASSES = {
+    'customer':        'bg-green-100 text-green-800',
+    'prospect':        'bg-blue-100 text-blue-800',
+    'prospect_1_week': 'bg-violet-100 text-violet-800',
+    'lead':            'bg-yellow-100 text-yellow-800',
+    'call_back':       'bg-indigo-100 text-indigo-800',
+  };
+
+  function updateRowBadge(pk, status, label) {
+    var badge = document.getElementById('badge-' + pk);
+    if (!badge) return;
+    badge.className = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ' +
+      (BADGE_CLASSES[status] || 'bg-gray-100 text-gray-600');
+    badge.textContent = label;
   }
 
   // ── CSRF helper ─────────────────────────────────────────────

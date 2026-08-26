@@ -7,6 +7,7 @@ class Contact(models.Model):
         ('call_back', 'Call Back'),
         ('call_back_no_answer', 'Call Back - No Answer'),
         ('prospect', 'Prospect'),
+        ('prospect_1_week', 'Prospect — 1 Week'),
         ('customer', 'Customer'),
         ('inactive', 'Inactive'),
     ]
