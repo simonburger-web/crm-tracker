@@ -7,9 +7,25 @@
   <a href="{% url 'driveops_analytics' %}" class="btn-secondary">Analytics</a>
 {% endblock %}
 
+<!-- Who are you? Modal -->
+<div id="user-select-modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/60"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-xs p-8 text-center">
+      <p class="text-xs font-semibold uppercase tracking-widest text-indigo-400 mb-2">DriveOps</p>
+      <h2 class="text-xl font-bold text-gray-900 mb-1">Who are you?</h2>
+      <p class="text-sm text-gray-500 mb-7">Your unworked leads will be filtered to your half.</p>
+      <div class="flex gap-3">
+        <button onclick="selectUser('simon')" class="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 text-sm transition">Simon</button>
+        <button onclick="selectUser('tristan')" class="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 text-sm transition">Tristan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% block content %}
-<!-- Filters -->
-<div class="bg-white rounded-xl border border-gray-200 p-4 mb-5 flex flex-wrap gap-3">
+<!-- Filters + user indicator -->
+<div class="bg-white rounded-xl border border-gray-200 p-4 mb-5">
   <form method="get" class="flex flex-wrap gap-3 w-full">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, company, phone..."
       class="form-input flex-1 min-w-48">
@@ -22,9 +38,13 @@
     <button type="submit" class="btn-primary">Search</button>
     {% if q or status %}<a href="{% url 'driveops' %}" class="btn-secondary">Clear</a>{% endif %}
   </form>
+  <div id="user-indicator" class="hidden mt-3 flex items-center gap-2 text-sm text-gray-500">
+    Showing leads for <span id="user-label" class="font-semibold text-indigo-700"></span>
+    <button onclick="switchUser()" class="ml-1 text-xs text-gray-400 underline hover:text-gray-600">Switch</button>
+  </div>
 </div>
 
-<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+<div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
   <table class="min-w-full divide-y divide-gray-200">
     <thead class="bg-gray-50">
       <tr>
@@ -357,5 +377,76 @@
     var cookie = document.cookie.split(';').find(function(c) { return c.trim().startsWith('csrftoken='); });
     return cookie ? cookie.trim().split('=')[1] : '';
   }
+
+  // ── User split: Simon vs Tristan ────────────────────────────
+  // Unworked leads (status='lead') are split by pk parity:
+  //   Simon  → even pk
+  //   Tristan → odd pk
+  // All other statuses are always visible to both users.
+
+  var LEAD_STATUS = 'lead';
+
+  function applyUserFilter(user) {
+    var rows = document.querySelectorAll('#driveops-table-body tr[id^="row-"]');
+    rows.forEach(function(row) {
+      var status = row.dataset.status;
+      if (status !== LEAD_STATUS) { row.style.display = ''; return; }
+      var pk = parseInt(row.id.replace('row-', ''), 10);
+      var isSimon   = (pk % 2 === 0);
+      var show = (user === 'simon') ? isSimon : !isSimon;
+      row.style.display = show ? '' : 'none';
+    });
+
+    // If every visible row is hidden, show a "no leads" message
+    var anyVisible = Array.from(rows).some(function(r) { return r.style.display !== 'none'; });
+    var empty = document.querySelector('#driveops-table-body .no-leads-msg');
+    if (!anyVisible && !document.querySelector('#driveops-table-body tr:not([id^="row-"])')) {
+      if (!empty) {
+        var tr = document.createElement('tr');
+        tr.className = 'no-leads-msg';
+        tr.innerHTML = '<td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">No unworked leads in your queue right now.</td>';
+        document.getElementById('driveops-table-body').appendChild(tr);
+      }
+    } else if (empty) {
+      empty.remove();
+    }
+  }
+
+  function showUserIndicator(user) {
+    var el = document.getElementById('user-indicator');
+    var label = document.getElementById('user-label');
+    if (el && label) {
+      label.textContent = user.charAt(0).toUpperCase() + user.slice(1);
+      el.classList.remove('hidden');
+      el.style.display = 'flex';
+    }
+  }
+
+  function selectUser(user) {
+    localStorage.setItem('driveops_user', user);
+    document.getElementById('user-select-modal').classList.add('hidden');
+    applyUserFilter(user);
+    showUserIndicator(user);
+  }
+
+  function switchUser() {
+    localStorage.removeItem('driveops_user');
+    document.getElementById('user-select-modal').classList.remove('hidden');
+    // Reset all rows to visible while modal is open
+    document.querySelectorAll('#driveops-table-body tr').forEach(function(r) { r.style.display = ''; });
+    var el = document.getElementById('user-indicator');
+    if (el) el.style.display = 'none';
+  }
+
+  // On page load: show modal or apply saved preference
+  (function() {
+    var saved = localStorage.getItem('driveops_user');
+    if (saved === 'simon' || saved === 'tristan') {
+      applyUserFilter(saved);
+      showUserIndicator(saved);
+    } else {
+      document.getElementById('user-select-modal').classList.remove('hidden');
+    }
+  })();
 </script>
 {% endblock %}

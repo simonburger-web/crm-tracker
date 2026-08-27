@@ -10,7 +10,7 @@
 
 <!-- Search -->
 <div class="bg-white rounded-xl border border-gray-200 p-4 mb-5">
-  <form method="get" class="flex gap-3">
+  <form method="get" class="flex flex-wrap gap-3">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, email, company..."
       class="form-input flex-1">
     <button type="submit" class="btn-primary">Search</button>
@@ -18,7 +18,7 @@
   </form>
 </div>
 
-<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+<div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
   <table class="min-w-full divide-y divide-gray-200">
     <thead class="bg-gray-50">
       <tr>
