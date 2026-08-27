@@ -75,17 +75,18 @@
         {% endif %}
 
         <!-- Actions -->
-        <div class="absolute top-2 right-2 flex gap-1">
-          <button class="complete-btn text-gray-300 hover:text-green-500" title="Mark complete">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-          </button>
-          <a href="{% url 'meeting_edit' meeting.pk %}" draggable="false" class="text-gray-300 hover:text-indigo-600 hidden group-hover:block" title="Edit">
+        <div class="absolute top-1.5 right-1.5 hidden group-hover:flex gap-1">
+          <a href="{% url 'meeting_edit' meeting.pk %}" draggable="false" class="text-gray-400 hover:text-indigo-600" title="Edit">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
           </a>
-          <a href="{% url 'meeting_delete' meeting.pk %}" draggable="false" class="text-gray-300 hover:text-red-500 hidden group-hover:block" title="Delete">
+          <a href="{% url 'meeting_delete' meeting.pk %}" draggable="false" class="text-gray-400 hover:text-red-500" title="Delete">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </a>
         </div>
+        <button class="complete-btn mt-2 w-full flex items-center justify-center gap-1 rounded bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium py-1 transition" title="Mark complete">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          Complete
+        </button>
       </div>
       {% empty %}
       <p class="text-xs text-gray-300 text-center pt-4 no-meetings-msg">No meetings</p>
@@ -530,17 +531,18 @@ function escHtml(s) {
       <p class="text-gray-500 truncate">${escHtml(d.contact)}</p>
       ${d.phone ? `<p class="text-gray-500 truncate">${escHtml(d.phone)}</p>` : ''}
       ${badgeCls && !completed ? `<span class="inline-block mt-1 rounded-full ${badgeCls} px-2 py-0.5 text-xs">${badgeLabel}</span>` : ''}
-      <div class="absolute top-2 right-2 flex gap-1">
-        <button class="complete-btn ${completed ? 'text-green-500' : 'text-gray-300 hover:text-green-500'}" title="${completed ? 'Mark incomplete' : 'Mark complete'}">
-          <svg class="w-3.5 h-3.5" fill="${completed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        </button>
+      <div class="absolute top-1.5 right-1.5 hidden group-hover:flex gap-1">
         <a href="${d.edit_url}" draggable="false" class="text-gray-400 hover:text-indigo-600" title="Edit">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>
         </a>
         <a href="${d.delete_url}" draggable="false" class="text-gray-400 hover:text-red-500" title="Delete">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </a>
-      </div>`;
+      </div>
+      <button class="complete-btn mt-2 w-full flex items-center justify-center gap-1 rounded bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium py-1 transition" title="Mark complete">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        Complete
+      </button>`;
     wireCard(el);
     wireCompleteBtn(el);
     return el;
