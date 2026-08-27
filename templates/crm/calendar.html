@@ -78,8 +78,8 @@
         {% endif %}
 
         <!-- Actions -->
-        <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-          <button class="complete-btn text-gray-400 {% if meeting.completed %}text-green-500{% else %}hover:text-green-500{% endif %}" title="{% if meeting.completed %}Mark incomplete{% else %}Mark complete{% endif %}">
+        <div class="absolute top-2 right-2 flex gap-1">
+          <button class="complete-btn {% if meeting.completed %}text-green-500{% else %}text-gray-300 hover:text-green-500{% endif %}" title="{% if meeting.completed %}Mark incomplete{% else %}Mark complete{% endif %}">
             <svg class="w-3.5 h-3.5" fill="{% if meeting.completed %}currentColor{% else %}none{% endif %}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
           </button>
           <a href="{% url 'meeting_edit' meeting.pk %}" draggable="false" class="text-gray-400 hover:text-indigo-600" title="Edit">
@@ -530,8 +530,8 @@ function escHtml(s) {
       <p class="text-gray-500 truncate">${escHtml(d.contact)}</p>
       ${d.phone ? `<p class="text-gray-500 truncate">${escHtml(d.phone)}</p>` : ''}
       ${badgeCls && !completed ? `<span class="inline-block mt-1 rounded-full ${badgeCls} px-2 py-0.5 text-xs">${badgeLabel}</span>` : ''}
-      <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-        <button class="complete-btn ${completed ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}" title="${completed ? 'Mark incomplete' : 'Mark complete'}">
+      <div class="absolute top-2 right-2 flex gap-1">
+        <button class="complete-btn ${completed ? 'text-green-500' : 'text-gray-300 hover:text-green-500'}" title="${completed ? 'Mark incomplete' : 'Mark complete'}">
           <svg class="w-3.5 h-3.5" fill="${completed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         </button>
         <a href="${d.edit_url}" draggable="false" class="text-gray-400 hover:text-indigo-600" title="Edit">

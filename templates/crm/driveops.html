@@ -7,6 +7,7 @@
   <a href="{% url 'driveops_analytics' %}" class="btn-secondary">Analytics</a>
 {% endblock %}
 
+{% block content %}
 <!-- Who are you? Modal -->
 <div id="user-select-modal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/60"></div>
@@ -22,8 +23,6 @@
     </div>
   </div>
 </div>
-
-{% block content %}
 <!-- Filters + user indicator -->
 <div class="bg-white rounded-xl border border-gray-200 p-4 mb-5">
   <form method="get" class="flex flex-wrap gap-3 w-full">
