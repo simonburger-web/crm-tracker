@@ -35,7 +35,7 @@
       {% endfor %}
     </select>
     <button type="submit" class="btn-primary">Search</button>
-    {% if q or status %}<a href="{% url 'driveops' %}" class="btn-secondary">Clear</a>{% endif %}
+    {% if q or status != 'lead' %}<a href="{% url 'driveops' %}" class="btn-secondary">Clear</a>{% endif %}
   </form>
   <div id="user-indicator" class="hidden mt-3 flex items-center gap-2 text-sm text-gray-500">
     Showing leads for <span id="user-label" class="font-semibold text-indigo-700"></span>

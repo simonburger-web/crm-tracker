@@ -584,7 +584,7 @@ def note_delete(request, pk):
 
 def driveops_view(request):
     q = request.GET.get('q', '')
-    status = request.GET.get('status', '')
+    status = request.GET.get('status', 'lead')  # default to leads
     contacts = Contact.objects.filter(
         company__icontains='driving school'
     ).exclude(status='inactive')
