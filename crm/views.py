@@ -416,6 +416,7 @@ def calendar_view(request):
     meetings = Meeting.objects.filter(
         scheduled_at__date__gte=today,
         scheduled_at__date__lte=today + timedelta(days=4),
+        completed=False,
     ).select_related('contact')
     day_meetings = {d: [] for d in days}
     for m in meetings:
@@ -440,6 +441,7 @@ def calendar_view(request):
     past_meetings = Meeting.objects.filter(
         scheduled_at__date__gte=today - timedelta(days=7),
         scheduled_at__date__lt=today,
+        completed=False,
     ).select_related('contact').order_by('scheduled_at')
 
     day_data = [(d, day_meetings[d], day_todos[d]) for d in days]
