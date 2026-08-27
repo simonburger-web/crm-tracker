@@ -476,6 +476,15 @@ def meeting_delete(request, pk):
     return render(request, 'crm/meeting_confirm_delete.html', {'meeting': meeting})
 
 
+def meeting_complete(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    meeting = get_object_or_404(Meeting, pk=pk)
+    meeting.completed = not meeting.completed
+    meeting.save()
+    return JsonResponse({'ok': True, 'completed': meeting.completed})
+
+
 def meeting_reschedule(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)

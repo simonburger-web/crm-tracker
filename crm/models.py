@@ -75,6 +75,7 @@ class Meeting(models.Model):
     meeting_type = models.CharField(max_length=20, choices=MEETING_TYPE_CHOICES, default='call')
     scheduled_at = models.DateTimeField()
     notes = models.TextField(blank=True)
+    completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
