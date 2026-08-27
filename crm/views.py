@@ -649,13 +649,14 @@ def driveops_analytics(request):
     ds_contacts = Contact.objects.filter(company__icontains='driving school')
 
     # ── Current status breakdown ────────────────────────────────
-    current_leads            = ds_contacts.filter(status='lead').count()
-    current_callbacks        = ds_contacts.filter(status='call_back').count()
-    current_prospects        = ds_contacts.filter(status='prospect').count()
-    current_prospect_1_week  = ds_contacts.filter(status='prospect_1_week').count()
-    current_inactive         = ds_contacts.filter(status='inactive').count()
-    current_customers        = ds_contacts.filter(status='customer').count()
-    total_active             = ds_contacts.exclude(status='inactive').count()
+    current_leads                 = ds_contacts.filter(status='lead').count()
+    current_callbacks             = ds_contacts.filter(status='call_back').count()
+    current_callback_no_answer    = ds_contacts.filter(status='call_back_no_answer').count()
+    current_prospects             = ds_contacts.filter(status='prospect').count()
+    current_prospect_1_week       = ds_contacts.filter(status='prospect_1_week').count()
+    current_inactive              = ds_contacts.filter(status='inactive').count()
+    current_customers             = ds_contacts.filter(status='customer').count()
+    total_active                  = ds_contacts.exclude(status='inactive').count()
 
     # ── Today's status change activity ──────────────────────────
     # Only look at logs for driving-school contacts
@@ -664,10 +665,11 @@ def driveops_analytics(request):
         contact_id__in=ds_pks,
         changed_at__gte=start_of_today,
     )
-    converted_to_callback_today       = today_logs.filter(to_status='call_back').count()
-    converted_to_prospect_today       = today_logs.filter(to_status='prospect').count()
-    converted_to_prospect_1_week_today = today_logs.filter(to_status='prospect_1_week').count()
-    converted_to_inactive_today       = today_logs.filter(to_status='inactive').count()
+    converted_to_callback_today            = today_logs.filter(to_status='call_back').count()
+    converted_to_callback_no_answer_today  = today_logs.filter(to_status='call_back_no_answer').count()
+    converted_to_prospect_today            = today_logs.filter(to_status='prospect').count()
+    converted_to_prospect_1_week_today     = today_logs.filter(to_status='prospect_1_week').count()
+    converted_to_inactive_today            = today_logs.filter(to_status='inactive').count()
     # Start-of-day leads = current leads + everything that moved OUT of lead today
     moved_out_of_lead_today = today_logs.filter(from_status='lead').count()
     start_of_day_leads = current_leads + moved_out_of_lead_today
@@ -733,6 +735,7 @@ def driveops_analytics(request):
             'date': day,
             'label': day.strftime('%a %-d %b') if day != today else 'Today',
             'to_callback': day_logs.filter(to_status='call_back').count(),
+            'to_callback_no_answer': day_logs.filter(to_status='call_back_no_answer').count(),
             'to_prospect': day_logs.filter(to_status='prospect').count(),
             'to_prospect_1_week': day_logs.filter(to_status='prospect_1_week').count(),
             'to_inactive': day_logs.filter(to_status='inactive').count(),
@@ -749,9 +752,11 @@ def driveops_analytics(request):
         'current_customers': current_customers,
         'total_active': total_active,
         'converted_to_callback_today': converted_to_callback_today,
+        'converted_to_callback_no_answer_today': converted_to_callback_no_answer_today,
         'converted_to_prospect_today': converted_to_prospect_today,
         'converted_to_prospect_1_week_today': converted_to_prospect_1_week_today,
         'converted_to_inactive_today': converted_to_inactive_today,
+        'current_callback_no_answer': current_callback_no_answer,
         'callback_queue': callback_queue,
         'prospect_queue': prospect_queue,
         'prospect_1_week_queue': prospect_1_week_queue,
