@@ -18,12 +18,13 @@
 {% block content %}
 <!-- Scope tabs -->
 <div class="flex flex-wrap items-center gap-2 mb-3">
-  {% for value, label in scopes %}
+  {% for value, label in scopes %}{% if value != 'mine' or current_rep %}
   <a href="?scope={{ value }}&amp;status={{ status }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}"
      class="rounded-full px-3 py-1 text-sm font-medium {% if scope == value %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
     {{ label }}{% if value == 'unassigned' and unassigned_count %} ({{ unassigned_count }}){% endif %}
   </a>
-  {% endfor %}
+  {% endif %}{% endfor %}
+  {% if not current_rep %}<span class="text-xs text-amber-700">Pick who you are in the sidebar to see “My leads”.</span>{% endif %}
 </div>
 
 <!-- Filters -->
@@ -51,7 +52,7 @@
   <span class="text-sm font-medium text-indigo-900"><span id="bulk-count">0</span> selected</span>
   <div class="flex items-center gap-2">
     <select name="owner" class="form-input w-40 py-1.5">
-      {% for rep in reps %}<option value="{{ rep.pk }}" {% if rep.pk == request.user.pk %}selected{% endif %}>{{ rep.get_username }}</option>{% endfor %}
+      {% for rep in reps %}<option value="{{ rep.pk }}" {% if rep == current_rep %}selected{% endif %}>{{ rep.get_username }}</option>{% endfor %}
       <option value="">— Unassigned —</option>
     </select>
     <button type="submit" name="action" value="assign" class="btn-secondary py-1.5">Assign</button>

@@ -75,13 +75,16 @@
         Mass Email
       </a>
     </nav>
-    <div class="px-6 py-4 border-t border-indigo-800 flex items-center justify-between gap-2 text-xs text-indigo-300">
-      <span class="truncate">Signed in as <strong class="text-white">{{ request.user.get_username }}</strong></span>
-      <form method="post" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <button type="submit" class="text-indigo-300 hover:text-white underline">Log out</button>
-      </form>
-    </div>
+    <form method="post" action="{% url 'choose_rep' %}" class="px-6 py-4 border-t border-indigo-800 text-xs text-indigo-300">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <label for="rep-switcher" class="block mb-1">Working as</label>
+      <select id="rep-switcher" name="rep" onchange="this.form.submit()"
+        class="w-full rounded-md border {% if current_rep %}border-indigo-700{% else %}border-amber-400{% endif %} bg-indigo-800 px-2 py-1.5 text-sm text-white focus:outline-none">
+        <option value="">{% if current_rep %}— Nobody —{% else %}Who are you?{% endif %}</option>
+        {% for rep in reps %}<option value="{{ rep.pk }}" {% if rep == current_rep %}selected{% endif %}>{{ rep.get_username|capfirst }}</option>{% endfor %}
+      </select>
+    </form>
   </aside>
 
   <!-- Main content -->

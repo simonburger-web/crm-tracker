@@ -8,7 +8,6 @@ from urllib.parse import unquote
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.contrib.auth.decorators import login_not_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Min, Q, Sum
 from django.db.models.functions import TruncDate
@@ -27,6 +26,7 @@ from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorF
 from .services import (
     change_status, expire_one_week_prospects, merge_contacts, start_campaign, status_since_subquery,
 )
+from .reps import SESSION_KEY as REP_SESSION_KEY, active_reps, current_rep
 from .utils import normalize_phone
 
 PAGE_SIZE = 50
@@ -201,6 +201,22 @@ def _contacts_csv(queryset, filename):
     return response
 
 
+# ── Rep picker ──────────────────────────────────────────────────────────────
+
+@require_POST
+def choose_rep(request):
+    """Set which rep is working in this browser. No password: this replaces the old logins."""
+    rep = active_reps().filter(pk=request.POST.get('rep') or 0).first()
+    if rep:
+        request.session[REP_SESSION_KEY] = rep.pk
+    else:
+        request.session.pop(REP_SESSION_KEY, None)
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = reverse('dashboard')
+    return redirect(next_url)
+
+
 # ── Dashboard ───────────────────────────────────────────────────────────────
 
 def dashboard(request):
@@ -216,9 +232,13 @@ def dashboard(request):
     stage_counts = dict(Deal.objects.values_list('stage').annotate(n=Count('id')).order_by())
     prospect_value = Contact.objects.filter(status='prospect').aggregate(total=Sum('estimated_value'))['total'] or 0
 
+    rep = current_rep(request)
     my_meetings = Meeting.objects.filter(completed=False).select_related('contact')
-    if Contact.objects.filter(owner=request.user).exists():
-        my_meetings = my_meetings.filter(Q(contact__owner=request.user) | Q(contact__owner__isnull=True))
+    if rep and Contact.objects.filter(owner=rep).exists():
+        my_meetings = my_meetings.filter(Q(contact__owner=rep) | Q(contact__owner__isnull=True))
+    follow_ups = Contact.objects.filter(status__in=Contact.FOLLOW_UP_STATUSES)
+    if rep:
+        follow_ups = follow_ups.filter(owner=rep)
 
     return render(request, 'crm/dashboard.html', {
         'total_contacts': Contact.objects.exclude(status='inactive').count(),
@@ -230,9 +250,7 @@ def dashboard(request):
         'recent_deals': Deal.objects.select_related('contact')[:5],
         'todays_meetings': my_meetings.filter(scheduled_at__gte=start_of_today, scheduled_at__lt=end_of_today),
         'overdue_meetings': my_meetings.filter(scheduled_at__lt=start_of_today).order_by('-scheduled_at')[:10],
-        'no_next_step_count': _without_next_step(
-            Contact.objects.filter(status__in=Contact.FOLLOW_UP_STATUSES, owner=request.user)
-        ).count(),
+        'no_next_step_count': _without_next_step(follow_ups).count(),
     })
 
 
@@ -354,7 +372,7 @@ def contact_detail(request, pk):
         if note_form.is_valid():
             note = note_form.save(commit=False)
             note.contact = contact
-            note.created_by = request.user
+            note.created_by = current_rep(request)
             note.save()
             return redirect('contact_detail', pk=pk)
 
@@ -387,7 +405,7 @@ def contact_detail(request, pk):
 
 
 def contact_create(request):
-    initial = {'owner': request.user}
+    initial = {'owner': current_rep(request)}
     region = request.GET.get('region')
     if region in ('us', 'sa'):
         initial['region'] = region
@@ -396,7 +414,7 @@ def contact_create(request):
     form = ContactForm(request.POST or None, initial=initial)
     if form.is_valid():
         contact = form.save(commit=False)
-        contact._changed_by = request.user
+        contact._changed_by = current_rep(request)
         contact.save()
         return redirect('contact_detail', pk=contact.pk)
     return render(request, 'crm/contact_form.html', {'form': form, 'title': 'Add Lead'})
@@ -407,7 +425,7 @@ def contact_edit(request, pk):
     form = ContactForm(request.POST or None, instance=contact)
     if form.is_valid():
         contact = form.save(commit=False)
-        contact._changed_by = request.user
+        contact._changed_by = current_rep(request)
         contact.save()
         return redirect('contact_detail', pk=pk)
     return render(request, 'crm/contact_form.html', {'form': form, 'title': 'Edit Lead', 'contact': contact})
@@ -448,7 +466,7 @@ def deal_detail(request, pk):
         if note_form.is_valid():
             note = note_form.save(commit=False)
             note.deal = deal
-            note.created_by = request.user
+            note.created_by = current_rep(request)
             note.save()
             return redirect('deal_detail', pk=pk)
     return render(request, 'crm/deal_detail.html', {
@@ -667,14 +685,15 @@ def driveops_view(request):
 
     q = request.GET.get('q', '').strip()
     status = request.GET.get('status', 'lead')  # default to unworked leads
-    scope = request.GET.get('scope', 'mine')
-    if scope not in dict(DRIVEOPS_SCOPES):
-        scope = 'mine'
+    rep = current_rep(request)
+    scope = request.GET.get('scope', 'mine' if rep else 'all')
+    if scope not in dict(DRIVEOPS_SCOPES) or (scope == 'mine' and not rep):
+        scope = 'all'  # "My leads" needs a rep picked in the sidebar
 
     base = Contact.objects.filter(pipeline='driveops').exclude(status='inactive')
     contacts = base
     if scope == 'mine':
-        contacts = contacts.filter(owner=request.user)
+        contacts = contacts.filter(owner=rep)
     elif scope == 'unassigned':
         contacts = contacts.filter(owner__isnull=True)
     if q:
@@ -703,7 +722,7 @@ def driveops_view(request):
         'unassigned_count': base.filter(owner__isnull=True).count(),
         'duplicate_phone_ids': set(_active_phone_duplicates('driveops').values_list('pk', flat=True)),
         'lost_reasons': Contact.LOST_REASON_CHOICES,
-        'reps': get_user_model().objects.filter(is_active=True).order_by('username'),
+
         'now': timezone.now(),
     })
 
@@ -732,7 +751,7 @@ def driveops_bulk(request):
         lost_reason = request.POST.get('lost_reason', '')
         done, errors = 0, set()
         for contact in contacts:
-            error = change_status(contact, new_status, request.user, lost_reason)
+            error = change_status(contact, new_status, current_rep(request), lost_reason)
             if error:
                 errors.add(error)
             else:
@@ -771,9 +790,9 @@ def driveops_schedule(request, pk):
 
     promote_from, promote_to = _SCHEDULE_PROMOTIONS[meeting_type]
     if contact.status in promote_from:
-        change_status(contact, promote_to, request.user)
+        change_status(contact, promote_to, current_rep(request))
     elif contact.owner_id is None:
-        contact.owner = request.user
+        contact.owner = current_rep(request)
         contact.save(update_fields=['owner', 'updated_at'])
 
     type_label = 'Call' if meeting_type == 'call' else 'Video Call'
@@ -928,7 +947,7 @@ def driveops_deactivate(request, pk):
     data, error = _json_body(request)
     if error:
         return error
-    error = change_status(contact, 'inactive', request.user, data.get('lost_reason', ''))
+    error = change_status(contact, 'inactive', current_rep(request), data.get('lost_reason', ''))
     if error:
         return JsonResponse({'error': error}, status=400)
     return JsonResponse({'ok': True, 'contact_id': pk})
@@ -943,13 +962,13 @@ def driveops_update_status(request, pk):
         return error
 
     new_status = data.get('status', '')
-    error = change_status(contact, new_status, request.user, data.get('lost_reason', ''))
+    error = change_status(contact, new_status, current_rep(request), data.get('lost_reason', ''))
     if error:
         return JsonResponse({'error': error}, status=400)
 
     note = (data.get('note') or '').strip()
     if note:
-        Note.objects.create(contact=contact, body=note, created_by=request.user)
+        Note.objects.create(contact=contact, body=note, created_by=current_rep(request))
 
     return JsonResponse({
         'ok': True,
@@ -996,12 +1015,12 @@ def leads_generator(request):
                     company=(r.get('company') or '').strip() or name,
                     region=region,
                     status='lead',
-                    owner=request.user,
+                    owner=current_rep(request),
                 ))
             # bulk_create skips save()/signals, so write the initial status logs explicitly.
             created = Contact.objects.bulk_create(to_create)
             ContactStatusLog.objects.bulk_create([
-                ContactStatusLog(contact=c, from_status='', to_status='lead', changed_by=request.user)
+                ContactStatusLog(contact=c, from_status='', to_status='lead', changed_by=current_rep(request))
                 for c in created
             ])
             imported_count = len(to_create)
@@ -1111,7 +1130,7 @@ def mass_email(request):
                 from_email=from_email,
                 skipped_unsubscribed=len(recipients) - len(allowed),
                 over_cap=max(0, len(allowed) - cap),
-                created_by=request.user,
+                created_by=current_rep(request),
             )
             EmailSend.objects.bulk_create([
                 EmailSend(campaign=campaign, email=e, contact=c) for e, c in allowed[:cap]
@@ -1134,7 +1153,8 @@ def mass_email(request):
             messages.success(request, f'Resumed sending "{campaign.subject}".')
         return redirect('mass_email')
 
-    default_from = request.user.email if request.user.email in ALLOWED_FROM else ALLOWED_FROM[0]
+    rep = current_rep(request)
+    default_from = rep.email if rep and rep.email in ALLOWED_FROM else ALLOWED_FROM[0]
     campaigns = EmailCampaign.objects.annotate(
         sent=Count('sends', filter=Q(sends__status='sent')),
         failed=Count('sends', filter=Q(sends__status='failed')),
@@ -1152,7 +1172,6 @@ def mass_email(request):
     })
 
 
-@login_not_required
 def unsubscribe(request, email):
     decoded = unquote(email).strip()
     # Only unsubscribe on POST: mail scanners pre-fetch links with GET.

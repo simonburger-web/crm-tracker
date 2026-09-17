@@ -26,9 +26,10 @@ class NormalizePhoneTests(TestCase):
 class CRMTestCase(TestCase):
     def setUp(self):
         User = get_user_model()
-        self.simon = User.objects.create_user('simon', password='pw', email='simon@altitudeinteractiveweb.com')
-        self.tristan = User.objects.create_user('tristan', password='pw')
-        self.client.force_login(self.simon)
+        # Migration 0017 creates the two reps; there are no logins, a browser just picks a rep.
+        self.simon = User.objects.get(username='simon')
+        self.tristan = User.objects.get(username='tristan')
+        self.client.post(reverse('choose_rep'), {'rep': self.simon.pk})
 
     def post_json(self, url, data):
         return self.client.post(url, json.dumps(data), content_type='application/json')
@@ -40,16 +41,27 @@ class CRMTestCase(TestCase):
         return Contact.objects.create(**defaults)
 
 
-class AuthTests(CRMTestCase):
-    def test_pages_require_login(self):
-        self.client.logout()
+class RepPickerTests(CRMTestCase):
+    def test_pages_open_without_login_or_rep(self):
+        self.client = self.client_class()
         for name in ('dashboard', 'us_leads', 'driveops', 'driveops_analytics', 'mass_email', 'calendar'):
-            response = self.client.get(reverse(name))
-            self.assertEqual(response.status_code, 302, name)
-            self.assertIn(reverse('login'), response['Location'])
+            self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
+        # With no rep picked, DriveOps shows everyone's leads and work is unattributed.
+        self.assertEqual(self.client.get(reverse('driveops')).context['scope'], 'all')
+        contact = self.driving_school()
+        self.post_json(reverse('driveops_update_status', args=[contact.pk]), {'status': 'call_back', 'note': 'hi'})
+        self.assertIsNone(ContactStatusLog.objects.filter(contact=contact).last().changed_by)
+        self.assertIsNone(Note.objects.get(contact=contact).created_by)
+
+    def test_switching_rep_and_safe_redirect(self):
+        response = self.client.post(reverse('choose_rep'), {'rep': self.tristan.pk, 'next': '/driveops/'})
+        self.assertRedirects(response, '/driveops/', fetch_redirect_response=False)
+        self.assertEqual(self.client.get(reverse('dashboard')).context['current_rep'], self.tristan)
+        response = self.client.post(reverse('choose_rep'), {'rep': '', 'next': 'https://evil.example.com/'})
+        self.assertEqual(response['Location'], reverse('dashboard'))
+        self.assertIsNone(self.client.get(reverse('dashboard')).context['current_rep'])
 
     def test_unsubscribe_is_public_and_needs_post(self):
-        self.client.logout()
         url = reverse('unsubscribe', args=['Someone@Example.com'])
         self.assertEqual(self.client.get(url).status_code, 200)
         self.assertFalse(Unsubscribe.objects.exists())
