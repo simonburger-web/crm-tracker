@@ -4,83 +4,129 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}CRM Tracker{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Corporate design system: the stock Tailwind palettes are remapped to muted, desaturated
+    // tones so every template picks them up without per-page edits. One accent (indigo = navy blue).
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto', 'sans-serif'] },
+          borderRadius: { DEFAULT: '3px', md: '4px', lg: '4px', xl: '4px', '2xl': '6px' },
+          boxShadow: { sm: '0 1px 1px rgba(16,24,40,.04)', DEFAULT: '0 1px 2px rgba(16,24,40,.06)' },
+          colors: {
+            gray:   { 50:'#f6f7f9',100:'#eceef2',200:'#dde1e7',300:'#c5cbd3',400:'#949ca8',500:'#6b7380',600:'#4f5763',700:'#3a414b',800:'#262c34',900:'#161a20',950:'#0e1115' },
+            indigo: { 50:'#eef3f9',100:'#d9e4f1',200:'#b3c8e2',300:'#85a6cf',400:'#5582b8',500:'#3366a3',600:'#1f548f',700:'#184476',800:'#13365d',900:'#0f2a48',950:'#0a1c31' },
+            blue:   { 50:'#f0f4f8',100:'#dde6ef',200:'#bccddf',300:'#93adc8',400:'#6a8cb0',500:'#4d7298',600:'#3d5d7e',700:'#324c67',800:'#293e54',900:'#223344',950:'#16222e' },
+            violet: { 50:'#eef4f5',100:'#d6e5e8',200:'#aecbd1',300:'#7fabb4',400:'#558b96',500:'#3d717c',600:'#305c66',700:'#284b53',800:'#213c43',900:'#1b3137',950:'#122125' },
+            purple: { 50:'#eef4f5',100:'#d6e5e8',200:'#aecbd1',300:'#7fabb4',400:'#558b96',500:'#3d717c',600:'#305c66',700:'#284b53',800:'#213c43',900:'#1b3137',950:'#122125' },
+            green:  { 50:'#eef6f1',100:'#d5eadd',200:'#abd4bb',300:'#79b793',400:'#4c9a6e',500:'#2f7f54',600:'#246844',700:'#1e5438',800:'#19432e',900:'#153726',950:'#0d2318' },
+            emerald:{ 50:'#eef6f1',100:'#d5eadd',200:'#abd4bb',300:'#79b793',400:'#4c9a6e',500:'#2f7f54',600:'#246844',700:'#1e5438',800:'#19432e',900:'#153726',950:'#0d2318' },
+            yellow: { 50:'#fbf7ec',100:'#f4ead0',200:'#e8d4a1',300:'#d9b96c',400:'#c9a043',500:'#b1882e',600:'#8f6c24',700:'#6f541e',800:'#56411a',900:'#433416',950:'#2b210d' },
+            amber:  { 50:'#fbf7ec',100:'#f4ead0',200:'#e8d4a1',300:'#d9b96c',400:'#c9a043',500:'#b1882e',600:'#8f6c24',700:'#6f541e',800:'#56411a',900:'#433416',950:'#2b210d' },
+            orange: { 50:'#fbf1ec',100:'#f5dfd3',200:'#eabda6',300:'#db9574',400:'#c9714c',500:'#b25a36',600:'#93482b',700:'#773a25',800:'#5f3020',900:'#4c281c',950:'#2f170f' },
+            red:    { 50:'#fcf2f2',100:'#f7dcdc',200:'#edb7b7',300:'#df8a8a',400:'#cc5f5f',500:'#b54343',600:'#983535',700:'#7c2c2c',800:'#642626',900:'#522121',950:'#301111' },
+            rose:   { 50:'#fcf2f2',100:'#f7dcdc',200:'#edb7b7',300:'#df8a8a',400:'#cc5f5f',500:'#b54343',600:'#983535',700:'#7c2c2c',800:'#642626',900:'#522121',950:'#301111' },
+            pink:   { 50:'#faf2f5',100:'#f2dde5',200:'#e4bccb',300:'#d193aa',400:'#b96d8a',500:'#9f5371',600:'#83435c',700:'#6a374b',800:'#552e3d',900:'#462733',950:'#2b151e' },
+          },
+        },
+      },
+    };
+  </script>
   <style type="text/tailwindcss">
     /* In the components layer so utilities on the element (w-48, hidden, py-1.5) still win. */
+    @layer base {
+      body { font-feature-settings: "tnum" 1; -webkit-font-smoothing: antialiased; }
+    }
     @layer components {
     .form-input {
-      @apply block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500;
+      @apply block w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-600;
     }
     .btn-primary {
-      @apply inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none;
+      @apply inline-flex items-center justify-center gap-1.5 rounded border border-indigo-700 bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:opacity-60;
     }
     .btn-secondary {
-      @apply inline-flex items-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm border border-gray-300 hover:bg-gray-50 focus:outline-none;
+      @apply inline-flex items-center justify-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300;
     }
     .btn-danger {
-      @apply inline-flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none;
+      @apply inline-flex items-center justify-center gap-1.5 rounded border border-red-700 bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none;
     }
+    .nav-section { @apply px-3 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500; }
+    .nav-link { @apply relative flex items-center gap-2.5 rounded px-3 py-1.5 text-[13px] font-medium text-gray-300 hover:bg-white/5 hover:text-white; }
+    .nav-link svg { @apply h-4 w-4 flex-shrink-0 text-gray-500; }
+    .nav-link.active { @apply bg-white/10 text-white; }
+    .nav-link.active::before { content: ""; @apply absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-indigo-400; }
+    .nav-link.active svg { @apply text-indigo-300; }
     }
   </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-100 text-gray-900 min-h-screen font-sans text-sm">
 
 <!-- Mobile sidebar overlay -->
-<div id="sidebar-overlay" class="fixed inset-0 z-30 bg-black/50 hidden lg:hidden" onclick="closeSidebar()"></div>
+<div id="sidebar-overlay" class="fixed inset-0 z-30 bg-gray-900/40 hidden lg:hidden" onclick="closeSidebar()"></div>
 
 <div class="flex min-h-screen">
   <!-- Sidebar -->
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 bg-indigo-900 text-white flex flex-col flex-shrink-0 transform -translate-x-full transition-transform duration-200 ease-in-out lg:static lg:translate-x-0">
-    <div class="px-6 py-5 border-b border-indigo-800 flex items-center justify-between">
-      <span class="text-xl font-bold tracking-tight">CRM Tracker</span>
-      <button onclick="closeSidebar()" class="lg:hidden text-indigo-300 hover:text-white p-1">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-60 bg-gray-900 text-white flex flex-col flex-shrink-0 border-r border-black/20 transform -translate-x-full transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0">
+    <div class="h-14 px-4 border-b border-white/10 flex items-center justify-between">
+      <a href="{% url 'dashboard' %}" class="flex items-center gap-2.5">
+        <span class="flex h-7 w-7 items-center justify-center rounded bg-indigo-600 text-[11px] font-semibold tracking-wide text-white">CT</span>
+        <span class="text-sm font-semibold tracking-tight text-white">CRM Tracker</span>
+      </a>
+      <button onclick="closeSidebar()" class="lg:hidden text-gray-400 hover:text-white p-1">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
-    <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-      <a href="{% url 'dashboard' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'dashboard' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+    <nav class="flex-1 px-3 pb-6 overflow-y-auto">
+      <a href="{% url 'dashboard' %}" onclick="closeSidebar()" class="nav-link{% if request.resolver_match.url_name == 'dashboard' %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
         Dashboard
       </a>
-      <a href="{% url 'us_leads' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'us_leads' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <p class="nav-section">Leads</p>
+      <a href="{% url 'us_leads' %}" onclick="closeSidebar()" class="nav-link{% if request.resolver_match.url_name == 'us_leads' %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         US Leads
       </a>
-      <a href="{% url 'sa_leads' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'sa_leads' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <a href="{% url 'sa_leads' %}" onclick="closeSidebar()" class="nav-link{% if request.resolver_match.url_name == 'sa_leads' %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         SA Leads
       </a>
-      <a href="{% url 'driveops' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if 'driveops' in request.resolver_match.url_name %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422A12.083 12.083 0 0121 15c0 4.97-4.03 9-9 9s-9-4.03-9-9c0-1.28.25-2.5.697-3.617L12 14z"/></svg>
+      <a href="{% url 'driveops' %}" onclick="closeSidebar()" class="nav-link{% if 'driveops' in request.resolver_match.url_name %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422A12.083 12.083 0 0121 15c0 4.97-4.03 9-9 9s-9-4.03-9-9c0-1.28.25-2.5.697-3.617L12 14z"/></svg>
         DriveOps
       </a>
-      <a href="{% url 'inactive_leads' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'inactive_leads' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+      <a href="{% url 'inactive_leads' %}" onclick="closeSidebar()" class="nav-link{% if request.resolver_match.url_name == 'inactive_leads' %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
         Inactive Leads
       </a>
-      <a href="{% url 'deal_list' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if 'deal' in request.resolver_match.url_name %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      <p class="nav-section">Sales</p>
+      <a href="{% url 'deal_list' %}" onclick="closeSidebar()" class="nav-link{% if 'deal' in request.resolver_match.url_name %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Closed Deals
       </a>
-      <a href="{% url 'calendar' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if 'calendar' in request.resolver_match.url_name or 'meeting' in request.resolver_match.url_name %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      <a href="{% url 'calendar' %}" onclick="closeSidebar()" class="nav-link{% if 'calendar' in request.resolver_match.url_name or 'meeting' in request.resolver_match.url_name %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Calendar
       </a>
-      <a href="{% url 'leads_generator' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'leads_generator' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5h2m-1 0v14m-7-7h14"/></svg>
+      <p class="nav-section">Outreach</p>
+      <a href="{% url 'leads_generator' %}" onclick="closeSidebar()" class="nav-link{% if request.resolver_match.url_name == 'leads_generator' %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5h2m-1 0v14m-7-7h14"/></svg>
         Leads Generator
       </a>
-      <a href="{% url 'mass_email' %}" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'mass_email' %}bg-indigo-700 text-white{% else %}text-indigo-100 hover:bg-indigo-800{% endif %}">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <a href="{% url 'mass_email' %}" onclick="closeSidebar()" class="nav-link{% if request.resolver_match.url_name == 'mass_email' %} active{% endif %}">
+        <svg aria-hidden="true"  fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
         Mass Email
       </a>
     </nav>
-    <form method="post" action="{% url 'choose_rep' %}" class="px-6 py-4 border-t border-indigo-800 text-xs text-indigo-300">
+    <form method="post" action="{% url 'choose_rep' %}" class="px-4 py-3 border-t border-white/10 text-[11px] text-gray-400">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <label for="rep-switcher" class="block mb-1">Working as</label>
+      <label for="rep-switcher" class="block mb-1 font-semibold uppercase tracking-wider text-gray-500">Working as</label>
       <select id="rep-switcher" name="rep" onchange="this.form.submit()"
-        class="w-full rounded-md border {% if current_rep %}border-indigo-700{% else %}border-amber-400{% endif %} bg-indigo-800 px-2 py-1.5 text-sm text-white focus:outline-none">
+        class="w-full rounded border {% if current_rep %}border-white/15{% else %}border-amber-400{% endif %} bg-white/5 px-2 py-1.5 text-[13px] text-white focus:outline-none focus:border-indigo-400">
         <option value="">{% if current_rep %}— Nobody —{% else %}Who are you?{% endif %}</option>
         {% for rep in reps %}<option value="{{ rep.pk }}" {% if rep == current_rep %}selected{% endif %}>{{ rep.get_username|capfirst }}</option>{% endfor %}
       </select>
@@ -89,24 +135,24 @@
 
   <!-- Main content -->
   <div class="flex-1 flex flex-col min-w-0">
-    <header class="bg-white border-b border-gray-200 px-4 sm:px-8 py-4 flex items-center justify-between gap-3">
+    <header class="sticky top-0 z-20 h-14 bg-white border-b border-gray-200 px-4 sm:px-6 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3 min-w-0">
         <!-- Hamburger (mobile only) -->
         <button onclick="openSidebar()" class="lg:hidden flex-shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <h1 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{% block page_title %}{% endblock %}</h1>
+        <h1 class="text-base font-semibold text-gray-900 truncate">{% block page_title %}{% endblock %}</h1>
       </div>
       <div class="flex gap-2 flex-shrink-0">{% block header_actions %}{% endblock %}</div>
     </header>
-    <main class="flex-1 px-4 sm:px-8 py-4 sm:py-6">
+    <main class="flex-1 px-4 sm:px-6 py-5 w-full max-w-[1600px]">
       {% if messages %}
       <div class="mb-4 space-y-2">
         {% for message in messages %}
-        <div class="rounded-lg px-4 py-3 text-sm font-medium
-          {% if message.tags == 'success' %}bg-green-100 text-green-800
-          {% elif message.tags == 'error' %}bg-red-100 text-red-800
-          {% else %}bg-blue-100 text-blue-800{% endif %}">
+        <div class="rounded border-l-[3px] px-4 py-2.5 text-sm
+          {% if message.tags == 'success' %}border-green-600 bg-green-50 text-green-800
+          {% elif message.tags == 'error' %}border-red-600 bg-red-50 text-red-800
+          {% else %}border-indigo-600 bg-indigo-50 text-indigo-800{% endif %}">
           {{ message }}
         </div>
         {% endfor %}

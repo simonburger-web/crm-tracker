@@ -20,7 +20,7 @@
     <!-- LEFT: Compose -->
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div class="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
-        <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+        <span class="w-6 h-6 rounded-sm bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">1</span>
         <h2 class="text-sm font-semibold text-gray-900">Compose</h2>
       </div>
 
@@ -59,10 +59,10 @@
       <!-- Header -->
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div class="flex items-center gap-3">
-          <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+          <span class="w-6 h-6 rounded-sm bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">2</span>
           <h2 class="text-sm font-semibold text-gray-900">Recipients</h2>
         </div>
-        <span id="total-badge" class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full">0 selected</span>
+        <span id="total-badge" class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-sm">0 selected</span>
       </div>
 
       <!-- CRM Contacts subsection -->
@@ -194,19 +194,19 @@
 <!-- ── Recent campaigns ───────────────────────────────────────────────── -->
 {% if campaigns %}
 <div class="mt-6 bg-white rounded-xl border border-gray-200 overflow-x-auto">
-  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
     <h2 class="text-sm font-semibold text-gray-900">Recent sends</h2>
     {% if any_sending %}<a href="{% url 'mass_email' %}" class="text-xs text-indigo-600 hover:underline">Refresh progress</a>{% endif %}
   </div>
   <table class="min-w-full divide-y divide-gray-200">
-    <thead class="bg-gray-50">
+    <thead class="bg-gray-50 border-b border-gray-200">
       <tr>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">When</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sent</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Failed</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pending</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Skipped</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Subject</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">When</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Sent</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Failed</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Pending</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Skipped</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -275,7 +275,7 @@
     container.innerHTML = '';
     extraEmails.forEach(addr => {
       const tag = document.createElement('span');
-      tag.className = 'inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-0.5';
+      tag.className = 'inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium rounded-sm pl-2.5 pr-1.5 py-0.5';
       tag.textContent = addr + ' ';
       const remove = document.createElement('button');
       remove.type = 'button';

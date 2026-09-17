@@ -1,0 +1,6 @@
+<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm border border-gray-200 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-700"><span class="h-1.5 w-1.5 rounded-full
+  {% if stage == 'won' %}bg-green-500
+  {% elif stage == 'lost' %}bg-red-500
+  {% elif stage == 'negotiation' %}bg-orange-500
+  {% elif stage == 'proposal' %}bg-blue-500
+  {% else %}bg-indigo-500{% endif %}"></span>{{ label }}</span>

@@ -67,45 +67,45 @@
 
 <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
   <table class="min-w-full divide-y divide-gray-200">
-    <thead class="bg-gray-50">
+    <thead class="bg-gray-50 border-b border-gray-200">
       <tr>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Closed Deals</th>
-        <th class="relative px-6 py-3"></th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Company</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Owner</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Closed Deals</th>
+        <th class="relative px-4 py-2"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for contact in contacts %}
       <tr class="hover:bg-gray-50{% if contact.pk in duplicate_phone_ids %} bg-red-50{% endif %}">
-        <td class="px-6 py-4">
+        <td class="px-4 py-2.5">
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ contact.name }}</a>
         </td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.email|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-600">
+        <td class="px-4 py-2.5 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-600">{{ contact.email|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-600">
           {{ contact.phone|default:"—" }}
           {% if contact.pk in duplicate_phone_ids %}
-          <span class="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">duplicate</span>
+          <span class="ml-1 inline-flex items-center rounded-sm px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">duplicate</span>
           {% endif %}
         </td>
-        <td class="px-6 py-4">
+        <td class="px-4 py-2.5">
           {% include "crm/_status_badge.html" with status=contact.status label=contact.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.owner.get_username|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.deal_count }}</td>
-        <td class="px-6 py-4 text-right text-sm">
+        <td class="px-4 py-2.5 text-sm text-gray-600">{{ contact.owner.get_username|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-600">{{ contact.deal_count }}</td>
+        <td class="px-4 py-2.5 text-right text-sm">
           <a href="{% url 'contact_edit' contact.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
           <a href="{% url 'contact_delete' contact.pk %}" class="text-gray-400 hover:text-red-600">Delete</a>
         </td>
       </tr>
       {% empty %}
       <tr>
-        <td colspan="8" class="px-6 py-10 text-center text-sm text-gray-400">No leads found.</td>
+        <td colspan="8" class="px-4 py-10 text-center text-sm text-gray-400">No leads found.</td>
       </tr>
       {% endfor %}
     </tbody>

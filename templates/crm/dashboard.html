@@ -11,7 +11,7 @@
 <!-- Today -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
   <div class="bg-white rounded-xl border border-gray-200 lg:col-span-2">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h2 class="text-sm font-semibold text-gray-700">Today's follow-ups ({{ todays_meetings|length }})</h2>
       <a href="{% url 'calendar' %}" class="text-xs text-indigo-600 hover:underline">Calendar</a>
     </div>
@@ -32,12 +32,12 @@
   <div class="space-y-5">
     <div class="bg-white rounded-xl border {% if overdue_meetings %}border-red-200{% else %}border-gray-200{% endif %} p-5">
       <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Overdue follow-ups</p>
-      <p class="mt-2 text-3xl font-bold {% if overdue_meetings %}text-red-600{% else %}text-gray-900{% endif %}">{{ overdue_meetings|length }}{% if overdue_meetings|length == 10 %}+{% endif %}</p>
+      <p class="mt-2 text-2xl font-semibold {% if overdue_meetings %}text-red-600{% else %}text-gray-900{% endif %}">{{ overdue_meetings|length }}{% if overdue_meetings|length == 10 %}+{% endif %}</p>
       {% if overdue_meetings %}<a href="{% url 'calendar' %}" class="text-xs text-red-600 hover:underline">Reschedule on the calendar</a>{% endif %}
     </div>
     <div class="bg-white rounded-xl border {% if no_next_step_count %}border-amber-200{% else %}border-gray-200{% endif %} p-5">
       <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">My leads with no next step</p>
-      <p class="mt-2 text-3xl font-bold {% if no_next_step_count %}text-amber-600{% else %}text-gray-900{% endif %}">{{ no_next_step_count }}</p>
+      <p class="mt-2 text-2xl font-semibold {% if no_next_step_count %}text-amber-600{% else %}text-gray-900{% endif %}">{{ no_next_step_count }}</p>
       <p class="text-xs text-gray-400">Call backs / prospects without a scheduled follow-up</p>
     </div>
   </div>
@@ -47,19 +47,19 @@
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
   <div class="bg-white rounded-xl border border-gray-200 p-5">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Leads</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900">{{ total_contacts }}</p>
+    <p class="mt-2 text-2xl font-semibold text-gray-900">{{ total_contacts }}</p>
   </div>
   <div class="bg-white rounded-xl border border-gray-200 p-5">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Closed Deals</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900">{{ total_deals }}</p>
+    <p class="mt-2 text-2xl font-semibold text-gray-900">{{ total_deals }}</p>
   </div>
   <div class="bg-white rounded-xl border border-gray-200 p-5">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Pipeline Value</p>
-    <p class="mt-2 text-3xl font-bold text-indigo-600">${{ pipeline_value|floatformat:0 }}</p>
+    <p class="mt-2 text-2xl font-semibold text-gray-900">${{ pipeline_value|floatformat:"0g" }}</p>
   </div>
   <div class="bg-white rounded-xl border border-gray-200 p-5">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Won Value</p>
-    <p class="mt-2 text-3xl font-bold text-green-600">${{ won_value|floatformat:0 }}</p>
+    <p class="mt-2 text-2xl font-semibold text-gray-900">${{ won_value|floatformat:"0g" }}</p>
   </div>
 </div>
 
@@ -69,7 +69,7 @@
   <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
     {% for stage, count, label in stage_data %}
     <div class="text-center p-3 rounded-lg bg-gray-50 border border-gray-100">
-      <p class="text-2xl font-bold text-gray-900">{{ count }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ count }}</p>
       <p class="text-xs text-gray-500 mt-1">{{ label }}</p>
     </div>
     {% endfor %}
@@ -79,7 +79,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
   <!-- Recent Leads -->
   <div class="bg-white rounded-xl border border-gray-200">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h2 class="text-sm font-semibold text-gray-700">Recent Leads</h2>
       <a href="{% url 'us_leads' %}" class="text-xs text-indigo-600 hover:underline">View all</a>
     </div>
@@ -100,7 +100,7 @@
 
   <!-- Recent Closed Deals -->
   <div class="bg-white rounded-xl border border-gray-200">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h2 class="text-sm font-semibold text-gray-700">Recent Closed Deals</h2>
       <a href="{% url 'deal_list' %}" class="text-xs text-indigo-600 hover:underline">View all</a>
     </div>
@@ -112,13 +112,8 @@
           <p class="text-xs text-gray-500">{{ deal.contact.name }}</p>
         </div>
         <div class="text-right">
-          <p class="text-sm font-semibold text-gray-900">${{ deal.value|floatformat:0 }}</p>
-          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-            {% if deal.stage == 'won' %}bg-green-100 text-green-800
-            {% elif deal.stage == 'lost' %}bg-red-100 text-red-800
-            {% else %}bg-indigo-100 text-indigo-800{% endif %}">
-            {{ deal.get_stage_display }}
-          </span>
+          <p class="text-sm font-semibold text-gray-900">${{ deal.value|floatformat:"0g" }}</p>
+          {% include "crm/_stage_badge.html" with stage=deal.stage label=deal.get_stage_display %}
         </div>
       </li>
       {% empty %}

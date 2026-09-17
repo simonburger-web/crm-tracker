@@ -17,13 +17,15 @@
 
 {% block content %}
 <!-- Scope tabs -->
-<div class="flex flex-wrap items-center gap-2 mb-3">
+<div class="flex flex-wrap items-center gap-3 mb-3">
+  <div class="inline-flex rounded border border-gray-300 bg-white p-0.5">
   {% for value, label in scopes %}{% if value != 'mine' or current_rep %}
   <a href="?scope={{ value }}&amp;status={{ status }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}"
-     class="rounded-full px-3 py-1 text-sm font-medium {% if scope == value %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+     class="rounded-sm px-3 py-1 text-[13px] font-medium {% if scope == value %}bg-gray-900 text-white{% else %}text-gray-600 hover:bg-gray-100 hover:text-gray-900{% endif %}">
     {{ label }}{% if value == 'unassigned' and unassigned_count %} ({{ unassigned_count }}){% endif %}
   </a>
   {% endif %}{% endfor %}
+  </div>
   {% if not current_rep %}<span class="text-xs text-amber-700">Pick who you are in the sidebar to see “My leads”.</span>{% endif %}
 </div>
 
@@ -73,51 +75,51 @@
 
 <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
   <table class="min-w-full divide-y divide-gray-200">
-    <thead class="bg-gray-50">
+    <thead class="bg-gray-50 border-b border-gray-200">
       <tr>
-        <th class="pl-6 pr-2 py-3 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-300" title="Select all on this page"></th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next step</th>
-        {% if scope != 'mine' %}<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>{% endif %}
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+        <th class="pl-4 pr-2 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-300" title="Select all on this page"></th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Company</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Next step</th>
+        {% if scope != 'mine' %}<th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Owner</th>{% endif %}
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100" id="driveops-table-body">
       {% for contact in contacts %}
       <tr class="hover:bg-gray-50" id="row-{{ contact.pk }}" data-status="{{ contact.status }}">
-        <td class="pl-6 pr-2 py-4"><input type="checkbox" name="contact_ids" value="{{ contact.pk }}" form="bulk-form" class="row-select rounded border-gray-300"></td>
-        <td class="px-6 py-4">
+        <td class="pl-4 pr-2 py-2.5"><input type="checkbox" name="contact_ids" value="{{ contact.pk }}" form="bulk-form" class="row-select rounded border-gray-300"></td>
+        <td class="px-4 py-2.5">
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ contact.name }}</a>
           {% if contact.pk in duplicate_phone_ids %}<span class="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title="Another lead has this phone number">Duplicate</span>{% endif %}
         </td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-600">{% if contact.phone %}<a href="tel:{{ contact.phone }}" class="hover:text-indigo-600 hover:underline">{{ contact.phone }}</a>{% else %}—{% endif %}</td>
-        <td class="px-6 py-4">
+        <td class="px-4 py-2.5 text-sm text-gray-600 whitespace-nowrap">{{ contact.company|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-600 whitespace-nowrap">{% if contact.phone %}<a href="tel:{{ contact.phone }}" class="hover:text-indigo-600 hover:underline">{{ contact.phone }}</a>{% else %}—{% endif %}</td>
+        <td class="px-4 py-2.5">
           {% include "crm/_status_badge.html" with status=contact.status label=contact.get_status_display badge_pk=contact.pk %}
         </td>
-        <td class="px-6 py-4 text-xs whitespace-nowrap" id="next-{{ contact.pk }}">
+        <td class="px-4 py-2.5 text-xs whitespace-nowrap" id="next-{{ contact.pk }}">
           {% if contact.next_meeting_at %}
             {% if contact.next_meeting_at < now %}<span class="text-red-600 font-medium">Overdue · {{ contact.next_meeting_at|date:"D j M H:i" }}</span>
             {% else %}<span class="text-gray-600">{{ contact.next_meeting_at|date:"D j M H:i" }}</span>{% endif %}
           {% elif contact.status in follow_up_statuses %}
-            <span class="text-amber-600 font-medium">⚠ None scheduled</span>
+            <span class="text-amber-600 font-medium">None scheduled</span>
           {% else %}<span class="text-gray-300">—</span>{% endif %}
         </td>
-        {% if scope != 'mine' %}<td class="px-6 py-4 text-sm text-gray-600">{{ contact.owner.get_username|default:"—" }}</td>{% endif %}
-        <td class="px-6 py-4">
+        {% if scope != 'mine' %}<td class="px-4 py-2.5 text-sm text-gray-600">{{ contact.owner.get_username|default:"—" }}</td>{% endif %}
+        <td class="px-4 py-2.5">
           <div class="flex items-center gap-2">
             <button
               onclick="openScheduleModal({{ contact.pk }}, '{{ contact.name|escapejs }}')"
-              class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 focus:outline-none">
+              class="inline-flex items-center gap-1.5 whitespace-nowrap rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-indigo-600 hover:text-indigo-700 focus:outline-none">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
               Schedule
             </button>
             <button
               onclick="openEditStatusModal({{ contact.pk }}, '{{ contact.name|escapejs }}', document.getElementById('row-{{ contact.pk }}').dataset.status)"
-              class="inline-flex items-center gap-1.5 rounded-md bg-white border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 focus:outline-none">
+              class="inline-flex items-center gap-1.5 whitespace-nowrap rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-indigo-600 hover:text-indigo-700 focus:outline-none">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
               Edit Status
             </button>
@@ -126,7 +128,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="8" class="px-6 py-10 text-center text-sm text-gray-400">
+        <td colspan="8" class="px-4 py-10 text-center text-sm text-gray-400">
           No driving school leads found.
           {% if scope == 'mine' and unassigned_count %}<a href="?scope=unassigned" class="text-indigo-600 hover:underline">View {{ unassigned_count }} unassigned</a> — working a lead assigns it to you.{% endif %}
         </td>
@@ -141,7 +143,7 @@
 <div id="schedule-modal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/40" onclick="closeScheduleModal()"></div>
   <div class="absolute inset-0 flex items-center justify-center p-4">
-    <div class="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+    <div class="relative bg-white rounded-xl shadow-lg w-full max-w-sm p-6">
       <h2 class="text-base font-semibold text-gray-900 mb-1">Create Calendar Entry</h2>
       <p class="text-sm text-gray-500 mb-5" id="schedule-contact-name"></p>
 
@@ -182,7 +184,7 @@
 <div id="edit-status-modal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/40" onclick="closeEditStatusModal()"></div>
   <div class="absolute inset-0 flex items-center justify-center p-4">
-    <div class="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+    <div class="relative bg-white rounded-xl shadow-lg w-full max-w-sm p-6">
       <h2 class="text-base font-semibold text-gray-900 mb-1">Edit Status</h2>
       <p class="text-sm text-gray-500 mb-5" id="edit-status-name"></p>
 
@@ -425,21 +427,23 @@
   }
 
   // ── Badge helper ────────────────────────────────────────────
-  var BADGE_CLASSES = {
-    'customer':        'bg-green-100 text-green-800',
-    'prospect':        'bg-blue-100 text-blue-800',
-    'prospect_1_week': 'bg-violet-100 text-violet-800',
-    'lead':            'bg-yellow-100 text-yellow-800',
-    'call_back':       'bg-indigo-100 text-indigo-800',
-    'call_back_no_answer': 'bg-orange-100 text-orange-800',
+  var BADGE_DOTS = {
+    'customer':            'bg-green-500',
+    'prospect':            'bg-indigo-500',
+    'prospect_1_week':     'bg-violet-500',
+    'lead':                'bg-gray-400',
+    'call_back':           'bg-blue-500',
+    'call_back_no_answer': 'bg-orange-500',
   };
 
   function updateRowBadge(pk, status, label) {
     var badge = document.getElementById('badge-' + pk);
     if (!badge) return;
-    badge.className = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ' +
-      (BADGE_CLASSES[status] || 'bg-gray-100 text-gray-600');
-    badge.textContent = label;
+    badge.innerHTML = '';
+    var dot = document.createElement('span');
+    dot.className = 'h-1.5 w-1.5 rounded-full ' + (BADGE_DOTS[status] || 'bg-gray-300');
+    badge.appendChild(dot);
+    badge.appendChild(document.createTextNode(label));
   }
 
   // ── Bulk selection ──────────────────────────────────────────

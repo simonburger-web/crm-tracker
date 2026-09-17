@@ -23,40 +23,40 @@
 
 <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
   <table class="min-w-full divide-y divide-gray-200">
-    <thead class="bg-gray-50">
+    <thead class="bg-gray-50 border-b border-gray-200">
       <tr>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-        <th class="relative px-6 py-3"></th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Company</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Region</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Reason</th>
+        <th class="relative px-4 py-2"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for contact in contacts %}
       <tr class="hover:bg-gray-50 opacity-75">
-        <td class="px-6 py-4">
+        <td class="px-4 py-2.5">
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-gray-600 hover:text-indigo-600 hover:underline">{{ contact.name }}</a>
         </td>
-        <td class="px-6 py-4 text-sm text-gray-500">{{ contact.company|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-500">{{ contact.email|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-500">{{ contact.phone|default:"—" }}</td>
-        <td class="px-6 py-4">
-          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">
+        <td class="px-4 py-2.5 text-sm text-gray-500">{{ contact.company|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-500">{{ contact.email|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-500">{{ contact.phone|default:"—" }}</td>
+        <td class="px-4 py-2.5">
+          <span class="inline-flex items-center rounded-sm px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">
             {{ contact.get_region_display }}
           </span>
         </td>
-        <td class="px-6 py-4 text-sm text-gray-500">{{ contact.get_lost_reason_display|default:"—" }}</td>
-        <td class="px-6 py-4 text-right text-sm">
+        <td class="px-4 py-2.5 text-sm text-gray-500">{{ contact.get_lost_reason_display|default:"—" }}</td>
+        <td class="px-4 py-2.5 text-right text-sm">
           <a href="{% url 'contact_edit' contact.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
           <a href="{% url 'contact_delete' contact.pk %}" class="text-gray-400 hover:text-red-600">Delete</a>
         </td>
       </tr>
       {% empty %}
       <tr>
-        <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-400">No inactive leads.</td>
+        <td colspan="7" class="px-4 py-10 text-center text-sm text-gray-400">No inactive leads.</td>
       </tr>
       {% endfor %}
     </tbody>

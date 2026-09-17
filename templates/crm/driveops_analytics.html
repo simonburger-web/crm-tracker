@@ -16,12 +16,12 @@
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">Leads at start of day</p>
-      <p class="text-3xl font-bold text-gray-900">{{ start_of_day_leads }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ start_of_day_leads }}</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">Leads now</p>
-      <p class="text-3xl font-bold text-gray-900">{{ current_leads }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ current_leads }}</p>
       {% if converted_to_callback_today or converted_to_callback_no_answer_today or converted_to_prospect_today or converted_to_prospect_1_week_today or converted_to_inactive_today %}
       <p class="text-xs text-green-600 mt-1">↓ {{ converted_to_callback_today|add:converted_to_callback_no_answer_today|add:converted_to_prospect_today|add:converted_to_prospect_1_week_today|add:converted_to_inactive_today }} moved out</p>
       {% endif %}
@@ -29,32 +29,32 @@
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">→ Callback today</p>
-      <p class="text-3xl font-bold text-indigo-600">{{ converted_to_callback_today }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ converted_to_callback_today }}</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">→ CB No Answer today</p>
-      <p class="text-3xl font-bold text-orange-500">{{ converted_to_callback_no_answer_today }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ converted_to_callback_no_answer_today }}</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">→ Prospect today</p>
-      <p class="text-3xl font-bold text-blue-600">{{ converted_to_prospect_today }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ converted_to_prospect_today }}</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">→ Prospect 1W today</p>
-      <p class="text-3xl font-bold text-violet-600">{{ converted_to_prospect_1_week_today }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ converted_to_prospect_1_week_today }}</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">→ Inactive today</p>
-      <p class="text-3xl font-bold text-gray-400">{{ converted_to_inactive_today }}</p>
+      <p class="text-2xl font-semibold text-gray-400">{{ converted_to_inactive_today }}</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 p-4">
       <p class="text-xs text-gray-500 mb-1">Total active</p>
-      <p class="text-3xl font-bold text-gray-900">{{ total_active }}</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ total_active }}</p>
       <p class="text-xs text-gray-400 mt-1">excl. inactive</p>
     </div>
 
@@ -70,9 +70,9 @@
 
       <div class="flex items-center gap-3">
         <span class="w-36 text-sm text-gray-600 flex-shrink-0">Lead</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+        <div class="flex-1 bg-gray-100 rounded-sm h-2 overflow-hidden">
           {% if total > 0 %}
-          <div class="bg-yellow-400 h-4 rounded-full" style="width: {% widthratio current_leads total 100 %}%"></div>
+          <div class="bg-indigo-600 h-2 rounded-sm" style="width: {% widthratio current_leads total 100 %}%"></div>
           {% endif %}
         </div>
         <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_leads }}</span>
@@ -80,9 +80,9 @@
 
       <div class="flex items-center gap-3">
         <span class="w-36 text-sm text-gray-600 flex-shrink-0">Call Back</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+        <div class="flex-1 bg-gray-100 rounded-sm h-2 overflow-hidden">
           {% if total > 0 %}
-          <div class="bg-indigo-500 h-4 rounded-full" style="width: {% widthratio current_callbacks total 100 %}%"></div>
+          <div class="bg-indigo-600 h-2 rounded-sm" style="width: {% widthratio current_callbacks total 100 %}%"></div>
           {% endif %}
         </div>
         <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_callbacks }}</span>
@@ -90,9 +90,9 @@
 
       <div class="flex items-center gap-3">
         <span class="w-36 text-sm text-gray-600 flex-shrink-0">CB No Answer</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+        <div class="flex-1 bg-gray-100 rounded-sm h-2 overflow-hidden">
           {% if total > 0 %}
-          <div class="bg-orange-400 h-4 rounded-full" style="width: {% widthratio current_callback_no_answer total 100 %}%"></div>
+          <div class="bg-indigo-600 h-2 rounded-sm" style="width: {% widthratio current_callback_no_answer total 100 %}%"></div>
           {% endif %}
         </div>
         <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_callback_no_answer }}</span>
@@ -100,9 +100,9 @@
 
       <div class="flex items-center gap-3">
         <span class="w-36 text-sm text-gray-600 flex-shrink-0">Prospect</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+        <div class="flex-1 bg-gray-100 rounded-sm h-2 overflow-hidden">
           {% if total > 0 %}
-          <div class="bg-blue-500 h-4 rounded-full" style="width: {% widthratio current_prospects total 100 %}%"></div>
+          <div class="bg-indigo-600 h-2 rounded-sm" style="width: {% widthratio current_prospects total 100 %}%"></div>
           {% endif %}
         </div>
         <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_prospects }}</span>
@@ -110,9 +110,9 @@
 
       <div class="flex items-center gap-3">
         <span class="w-36 text-sm text-gray-600 flex-shrink-0">Prospect — 1 Week</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+        <div class="flex-1 bg-gray-100 rounded-sm h-2 overflow-hidden">
           {% if total > 0 %}
-          <div class="bg-violet-500 h-4 rounded-full" style="width: {% widthratio current_prospect_1_week total 100 %}%"></div>
+          <div class="bg-indigo-600 h-2 rounded-sm" style="width: {% widthratio current_prospect_1_week total 100 %}%"></div>
           {% endif %}
         </div>
         <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_prospect_1_week }}</span>
@@ -120,9 +120,9 @@
 
       <div class="flex items-center gap-3">
         <span class="w-36 text-sm text-gray-600 flex-shrink-0">Customer</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+        <div class="flex-1 bg-gray-100 rounded-sm h-2 overflow-hidden">
           {% if total > 0 %}
-          <div class="bg-green-500 h-4 rounded-full" style="width: {% widthratio current_customers total 100 %}%"></div>
+          <div class="bg-indigo-600 h-2 rounded-sm" style="width: {% widthratio current_customers total 100 %}%"></div>
           {% endif %}
         </div>
         <span class="w-10 text-sm font-medium text-gray-900 text-right">{{ current_customers }}</span>
@@ -138,15 +138,15 @@
   <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Last 7 Days — Conversions</p>
   <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200">
-      <thead class="bg-gray-50">
+      <thead class="bg-gray-50 border-b border-gray-200">
         <tr>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Callback</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ CB No Ans</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Prospect</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Prospect 1W</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Inactive</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total moved</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">→ Callback</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">→ CB No Ans</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">→ Prospect</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">→ Prospect 1W</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">→ Inactive</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Total moved</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -188,12 +188,12 @@
   <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
     {% if rep_stats %}
     <table class="min-w-full divide-y divide-gray-200">
-      <thead class="bg-gray-50">
+      <thead class="bg-gray-50 border-b border-gray-200">
         <tr>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rep</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Leads worked today</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Leads worked (7 days)</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">→ Prospect / Customer (7 days)</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Rep</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Leads worked today</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Leads worked (7 days)</th>
+          <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">→ Prospect / Customer (7 days)</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -222,8 +222,8 @@
       {% for reason in lost_reasons %}
       <li class="grid grid-cols-[10rem_1fr_3rem] sm:grid-cols-[14rem_1fr_3rem] items-center gap-3 text-sm">
         <span class="text-gray-700 truncate">{{ reason.label }}</span>
-        <span class="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-          <span class="block h-full rounded-full bg-rose-400" style="width: {% widthratio reason.count lost_reasons_max 100 %}%"></span>
+        <span class="h-2.5 rounded-sm bg-gray-100 overflow-hidden">
+          <span class="block h-full rounded-sm bg-indigo-600" style="width: {% widthratio reason.count lost_reasons_max 100 %}%"></span>
         </span>
         <span class="text-right font-semibold text-gray-900 tabular-nums">{{ reason.count }}</span>
       </li>
@@ -245,21 +245,21 @@
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {% if callback_queue %}
       <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+        <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Waiting</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Waiting</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           {% for item in callback_queue %}
           <tr class="hover:bg-gray-50 {% if item.days >= 7 %}bg-red-50{% elif item.days >= 3 %}bg-yellow-50{% endif %}">
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5">
               <a href="{% url 'contact_detail' item.contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ item.contact.name }}</a>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
+            <td class="px-4 py-2.5">
               <span class="text-sm font-medium {% if item.days >= 7 %}text-red-600{% elif item.days >= 3 %}text-yellow-700{% else %}text-gray-700{% endif %}">
                 {{ item.duration }}
               </span>
@@ -281,21 +281,21 @@
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {% if prospect_queue %}
       <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+        <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">As prospect</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">As prospect</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           {% for item in prospect_queue %}
           <tr class="hover:bg-gray-50">
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5">
               <a href="{% url 'contact_detail' item.contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ item.contact.name }}</a>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
-            <td class="px-4 py-3 text-sm font-medium text-blue-700">{{ item.duration }}</td>
+            <td class="px-4 py-2.5 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
+            <td class="px-4 py-2.5 text-sm font-medium text-blue-700">{{ item.duration }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -313,21 +313,21 @@
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {% if prospect_1_week_queue %}
       <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+        <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days left</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Days left</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           {% for item in prospect_1_week_queue %}
           <tr class="hover:bg-gray-50 {% if item.days_remaining <= 1 %}bg-red-50{% elif item.days_remaining <= 3 %}bg-yellow-50{% endif %}">
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5">
               <a href="{% url 'contact_detail' item.contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ item.contact.name }}</a>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5 text-sm text-gray-600">{{ item.contact.phone|default:"—" }}</td>
+            <td class="px-4 py-2.5">
               <span class="text-sm font-medium {% if item.days_remaining <= 1 %}text-red-600{% elif item.days_remaining <= 3 %}text-yellow-700{% else %}text-violet-700{% endif %}">
                 {{ item.days_remaining }}d
               </span>
