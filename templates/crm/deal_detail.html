@@ -61,7 +61,7 @@
         <li class="bg-gray-50 rounded-lg p-3 text-sm">
           <p class="text-gray-800">{{ note.body }}</p>
           <div class="flex items-center justify-between mt-2">
-            <span class="text-xs text-gray-400">{{ note.created_at|date:"M d, Y H:i" }}</span>
+            <span class="text-xs text-gray-400">{{ note.created_at|date:"M d, Y H:i" }}{% if note.created_by %} · {{ note.created_by.get_username }}{% endif %}</span>
             <a href="{% url 'note_delete' note.pk %}" class="text-xs text-red-400 hover:text-red-600">Delete</a>
           </div>
         </li>

@@ -31,6 +31,7 @@ urlpatterns = [
     path('driveops/schedule/<int:pk>/', views.driveops_schedule, name='driveops_schedule'),
     path('driveops/deactivate/<int:pk>/', views.driveops_deactivate, name='driveops_deactivate'),
     path('driveops/status/<int:pk>/', views.driveops_update_status, name='driveops_update_status'),
+    path('driveops/bulk/', views.driveops_bulk, name='driveops_bulk'),
     path('email/', views.mass_email, name='mass_email'),
     path('email/saved/<int:pk>/delete/', views.saved_recipient_delete, name='saved_recipient_delete'),
     path('unsubscribe/<str:email>/', views.unsubscribe, name='unsubscribe'),

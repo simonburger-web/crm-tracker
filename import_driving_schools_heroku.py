@@ -973,6 +973,7 @@ for name, phone, email, note_body in SCHOOLS:
         email=email,
         status='lead',
         region='sa',
+        pipeline='driveops',
     )
     if note_body:
         Note.objects.create(contact=contact, body=note_body)

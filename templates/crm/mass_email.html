@@ -15,7 +15,7 @@
   {% csrf_token %}
 
   <!-- ── Two-column workspace ───────────────────────────────────────────── -->
-  <div class="grid grid-cols-[1fr_400px] gap-4 items-start">
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 items-start">
 
     <!-- LEFT: Compose -->
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -27,12 +27,12 @@
       <div class="p-6 space-y-4">
 
         <!-- From + Subject on one row -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label for="id_from_email" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">From</label>
             <select name="from_email" id="id_from_email" class="form-input text-sm" onchange="updatePreview()">
-              <option value="simon@altitudeinteractiveweb.com" {% if request.POST.from_email == 'simon@altitudeinteractiveweb.com' or not request.POST.from_email %}selected{% endif %}>Simon</option>
-              <option value="tristan@altitudeinteractiveweb.com" {% if request.POST.from_email == 'tristan@altitudeinteractiveweb.com' %}selected{% endif %}>Tristan</option>
+              <option value="simon@altitudeinteractiveweb.com" {% if default_from == 'simon@altitudeinteractiveweb.com' %}selected{% endif %}>Simon</option>
+              <option value="tristan@altitudeinteractiveweb.com" {% if default_from == 'tristan@altitudeinteractiveweb.com' %}selected{% endif %}>Tristan</option>
             </select>
           </div>
           <div>
@@ -172,42 +172,7 @@
   </div><!-- end grid -->
 
   <!-- ── Send bar ─────────────────────────────────────────────────────────── -->
-  {% if sent and success_count %}
-    <!-- Success state -->
-    <div class="bg-green-600 rounded-xl px-6 py-5 flex items-center gap-5">
-      <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-      </div>
-      <div class="flex-1 min-w-0">
-        <p class="text-white font-semibold text-base">Email sent successfully</p>
-        <p class="text-green-100 text-sm mt-0.5">
-          {% if remaining_count %}
-            {{ success_count }} of {{ success_count|add:remaining_count }} sent this run — run again to send to the remaining {{ remaining_count }}.
-          {% else %}
-            Delivered to {{ success_count }} recipient{{ success_count|pluralize }}.
-          {% endif %}
-          {% if skipped_count %} · {{ skipped_count }} skipped (unsubscribed).{% endif %}
-          {% if failed_recipients %} · Failed: {{ failed_recipients|join:", " }}{% endif %}
-        </p>
-      </div>
-      <a href="{% url 'mass_email' %}"
-        class="flex-shrink-0 inline-flex items-center gap-2 rounded-md bg-white/20 hover:bg-white/30 px-4 py-2 text-sm font-semibold text-white">
-        Send another
-      </a>
-    </div>
-  {% elif sent and not success_count %}
-    <!-- All failed state -->
-    <div class="bg-red-600 rounded-xl px-6 py-5 flex items-center gap-5">
-      <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </div>
-      <div class="flex-1">
-        <p class="text-white font-semibold text-base">Send failed</p>
-        <p class="text-red-100 text-sm mt-0.5">Check your SMTP credentials in Heroku config. Failed: {{ failed_recipients|join:", " }}</p>
-      </div>
-    </div>
-  {% else %}
-    <!-- Normal send bar -->
+    <!-- Send bar -->
     <div class="bg-white rounded-xl border border-gray-200 px-6 py-4 flex items-center gap-6">
       <div class="flex-1 min-w-0 space-y-0.5">
         <div class="text-xs text-gray-400">From: <span id="preview-from" class="font-semibold text-gray-700">simon@altitudeinteractiveweb.com</span></div>
@@ -223,9 +188,51 @@
         </button>
       </div>
     </div>
-  {% endif %}
 
 </form>
+
+<!-- ── Recent campaigns ───────────────────────────────────────────────── -->
+{% if campaigns %}
+<div class="mt-6 bg-white rounded-xl border border-gray-200 overflow-x-auto">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <h2 class="text-sm font-semibold text-gray-900">Recent sends</h2>
+    {% if any_sending %}<a href="{% url 'mass_email' %}" class="text-xs text-indigo-600 hover:underline">Refresh progress</a>{% endif %}
+  </div>
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">When</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sent</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Failed</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pending</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Skipped</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for c in campaigns %}
+      <tr>
+        <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ c.subject }}<span class="block text-xs font-normal text-gray-400">from {{ c.from_email }}</span></td>
+        <td class="px-6 py-3 text-sm text-gray-500 whitespace-nowrap">{{ c.created_at|date:"D j M H:i" }}</td>
+        <td class="px-6 py-3 text-sm text-green-700 font-medium">{{ c.sent }}</td>
+        <td class="px-6 py-3 text-sm {% if c.failed %}text-red-600 font-medium{% else %}text-gray-400{% endif %}">{{ c.failed }}</td>
+        <td class="px-6 py-3 text-sm text-gray-600">
+          {{ c.pending }}
+          {% if c.pending and c.created_at < stale_before %}
+          <a href="?resume={{ c.pk }}" class="ml-2 text-xs text-indigo-600 hover:underline" title="Sending seems to have stopped (e.g. the server restarted)">Resume</a>
+          {% endif %}
+        </td>
+        <td class="px-6 py-3 text-xs text-gray-500">
+          {% if c.skipped_unsubscribed %}{{ c.skipped_unsubscribed }} unsubscribed{% endif %}
+          {% if c.over_cap %}{% if c.skipped_unsubscribed %} · {% endif %}{{ c.over_cap }} over the 40 cap{% endif %}
+          {% if not c.skipped_unsubscribed and not c.over_cap %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 <script>
   // ── Extra emails (tag list) ───────────────────────────────────────────────
@@ -267,10 +274,15 @@
     const hint = document.getElementById('no-extras-hint');
     container.innerHTML = '';
     extraEmails.forEach(addr => {
-      const safeAddr = addr.replace(/'/g, "\\'");
       const tag = document.createElement('span');
       tag.className = 'inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium rounded-full pl-2.5 pr-1.5 py-0.5';
-      tag.innerHTML = `${addr} <button type="button" onclick="removeEmail('${safeAddr}')" class="text-indigo-400 hover:text-indigo-700 text-sm leading-none ml-0.5">&times;</button>`;
+      tag.textContent = addr + ' ';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'text-indigo-400 hover:text-indigo-700 text-sm leading-none ml-0.5';
+      remove.innerHTML = '&times;';
+      remove.addEventListener('click', () => removeEmail(addr));
+      tag.appendChild(remove);
       container.appendChild(tag);
     });
     hint.style.display = extraEmails.length ? 'none' : '';
@@ -384,7 +396,7 @@
     if (btn) {
       document.getElementById('send-icon').classList.add('hidden');
       document.getElementById('send-spinner').classList.remove('hidden');
-      document.getElementById('send-label').textContent = 'Sending…';
+      document.getElementById('send-label').textContent = 'Queuing…';
       btn.disabled = true;
       btn.classList.add('opacity-75', 'cursor-not-allowed');
     }

@@ -61,7 +61,7 @@
                 {{ contact.get_status_display }}
               </span>
             </td>
-            <td class="px-6 py-4 text-sm text-gray-600">{{ contact.deals.count }}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">{{ contact.deal_count }}</td>
             <td class="px-6 py-4 text-right text-sm">
               <a href="{% url 'contact_edit' contact.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
               <a href="{% url 'contact_delete' contact.pk %}" class="text-gray-400 hover:text-red-600">Delete</a>
@@ -113,7 +113,7 @@
                 {{ contact.get_status_display }}
               </span>
             </td>
-            <td class="px-6 py-4 text-sm text-gray-600">{{ contact.deals.count }}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">{{ contact.deal_count }}</td>
             <td class="px-6 py-4 text-right text-sm">
               <a href="{% url 'contact_edit' contact.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
               <a href="{% url 'contact_delete' contact.pk %}" class="text-gray-400 hover:text-red-600">Delete</a>

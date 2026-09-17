@@ -50,6 +50,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Every page requires a login unless the view is marked @login_not_required.
+    'django.contrib.auth.middleware.LoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -110,6 +112,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
+# Meeting times are entered and shown in this zone. Changing it shifts every existing meeting.
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
@@ -119,6 +122,15 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
+
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'dashboard'
+LOGOUT_REDIRECT_URL = 'login'
+
+# Heroku terminates TLS at the router and forwards the original scheme in this header.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# HTTPS-only cookies on Heroku (DYNO is set there), plain cookies for local runserver.
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = 'DYNO' in os.environ
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -139,3 +151,8 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@crmtracker.local')
+
+# Mass email: send in a background thread so the request returns immediately.
+CRM_EMAIL_ASYNC = os.environ.get('CRM_EMAIL_ASYNC', 'True') == 'True'
+CRM_EMAIL_DELAY_SECONDS = (4, 8)
+CRM_EMAIL_MAX_RECIPIENTS = 40

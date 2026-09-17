@@ -154,6 +154,7 @@ def import_schools(urls, dry_run=False):
                 'email': data['email'],
                 'status': 'lead',
                 'region': 'sa',
+                'pipeline': 'driveops',
             }
         )
 

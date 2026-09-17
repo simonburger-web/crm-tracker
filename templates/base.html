@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}CRM Tracker{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
+  <style type="text/tailwindcss">
+    /* In the components layer so utilities on the element (w-48, hidden, py-1.5) still win. */
+    @layer components {
     .form-input {
       @apply block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500;
     }
@@ -17,6 +19,7 @@
     }
     .btn-danger {
       @apply inline-flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none;
+    }
     }
   </style>
 </head>
@@ -72,8 +75,12 @@
         Mass Email
       </a>
     </nav>
-    <div class="px-6 py-4 border-t border-indigo-800 text-xs text-indigo-400">
-      CRM Tracker v1.0
+    <div class="px-6 py-4 border-t border-indigo-800 flex items-center justify-between gap-2 text-xs text-indigo-300">
+      <span class="truncate">Signed in as <strong class="text-white">{{ request.user.get_username }}</strong></span>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="text-indigo-300 hover:text-white underline">Log out</button>
+      </form>
     </div>
   </aside>
 

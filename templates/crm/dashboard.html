@@ -8,6 +8,41 @@
 {% endblock %}
 
 {% block content %}
+<!-- Today -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+  <div class="bg-white rounded-xl border border-gray-200 lg:col-span-2">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 class="text-sm font-semibold text-gray-700">Today's follow-ups ({{ todays_meetings|length }})</h2>
+      <a href="{% url 'calendar' %}" class="text-xs text-indigo-600 hover:underline">Calendar</a>
+    </div>
+    <ul class="divide-y divide-gray-50">
+      {% for meeting in todays_meetings %}
+      <li class="px-6 py-3 flex items-center justify-between">
+        <div class="min-w-0">
+          <a href="{% url 'contact_detail' meeting.contact_id %}" class="text-sm font-medium text-gray-900 hover:text-indigo-600">{{ meeting.title }}</a>
+          <p class="text-xs text-gray-500 truncate">{{ meeting.contact.name }}{% if meeting.contact.phone %} · <a href="tel:{{ meeting.contact.phone }}" class="hover:underline">{{ meeting.contact.phone }}</a>{% endif %}</p>
+        </div>
+        <span class="text-sm font-semibold text-indigo-600">{{ meeting.scheduled_at|time:"H:i" }}</span>
+      </li>
+      {% empty %}
+      <li class="px-6 py-4 text-sm text-gray-400">Nothing scheduled today.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="space-y-5">
+    <div class="bg-white rounded-xl border {% if overdue_meetings %}border-red-200{% else %}border-gray-200{% endif %} p-5">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Overdue follow-ups</p>
+      <p class="mt-2 text-3xl font-bold {% if overdue_meetings %}text-red-600{% else %}text-gray-900{% endif %}">{{ overdue_meetings|length }}{% if overdue_meetings|length == 10 %}+{% endif %}</p>
+      {% if overdue_meetings %}<a href="{% url 'calendar' %}" class="text-xs text-red-600 hover:underline">Reschedule on the calendar</a>{% endif %}
+    </div>
+    <div class="bg-white rounded-xl border {% if no_next_step_count %}border-amber-200{% else %}border-gray-200{% endif %} p-5">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">My leads with no next step</p>
+      <p class="mt-2 text-3xl font-bold {% if no_next_step_count %}text-amber-600{% else %}text-gray-900{% endif %}">{{ no_next_step_count }}</p>
+      <p class="text-xs text-gray-400">Call backs / prospects without a scheduled follow-up</p>
+    </div>
+  </div>
+</div>
+
 <!-- Stats -->
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
   <div class="bg-white rounded-xl border border-gray-200 p-5">
@@ -31,7 +66,7 @@
 <!-- Pipeline stages -->
 <div class="bg-white rounded-xl border border-gray-200 p-6 mb-8">
   <h2 class="text-sm font-semibold text-gray-700 mb-4">Pipeline Stages</h2>
-  <div class="grid grid-cols-5 gap-3">
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
     {% for stage, count, label in stage_data %}
     <div class="text-center p-3 rounded-lg bg-gray-50 border border-gray-100">
       <p class="text-2xl font-bold text-gray-900">{{ count }}</p>
@@ -46,7 +81,7 @@
   <div class="bg-white rounded-xl border border-gray-200">
     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
       <h2 class="text-sm font-semibold text-gray-700">Recent Leads</h2>
-      <a href="{% url 'contact_list' %}" class="text-xs text-indigo-600 hover:underline">View all</a>
+      <a href="{% url 'us_leads' %}" class="text-xs text-indigo-600 hover:underline">View all</a>
     </div>
     <ul class="divide-y divide-gray-50">
       {% for contact in recent_contacts %}
@@ -55,13 +90,7 @@
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-gray-900 hover:text-indigo-600">{{ contact.name }}</a>
           <p class="text-xs text-gray-500">{{ contact.company }}</p>
         </div>
-        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-          {% if contact.status == 'customer' %}bg-green-100 text-green-800
-          {% elif contact.status == 'prospect' %}bg-blue-100 text-blue-800
-          {% elif contact.status == 'lead' %}bg-yellow-100 text-yellow-800
-          {% else %}bg-gray-100 text-gray-600{% endif %}">
-          {{ contact.get_status_display }}
-        </span>
+        {% include "crm/_status_badge.html" with status=contact.status label=contact.get_status_display %}
       </li>
       {% empty %}
       <li class="px-6 py-4 text-sm text-gray-400">No leads yet.</li>

@@ -1,18 +1,36 @@
-from datetime import date, datetime, timedelta
-import os
+from datetime import datetime, time, timedelta
+import csv
 import json
-import time
-import random
+import os
 import urllib.parse
 import urllib.request
-from urllib.parse import quote, unquote
-from django.core.mail import send_mail
-from django.http import JsonResponse
+from urllib.parse import unquote
+
+from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_not_required
+from django.core.paginator import Paginator
+from django.db.models import Count, Min, Q, Sum
+from django.db.models.functions import TruncDate
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
+from django.conf import settings
 from django.urls import reverse
-from django.db.models import Q, Sum, Count
-from .models import Contact, Deal, Note, Meeting, TodoBlock, SavedRecipient, Unsubscribe, ContactStatusLog
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
+
+from .models import (
+    Contact, ContactStatusLog, Deal, EmailCampaign, EmailSend, Meeting, Note, SavedRecipient, TodoBlock, Unsubscribe,
+)
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
+from .services import (
+    change_status, expire_one_week_prospects, merge_contacts, start_campaign, status_since_subquery,
+)
+from .utils import normalize_phone
+
+PAGE_SIZE = 50
+OPEN_DEAL_STAGES = ('prospecting', 'proposal', 'negotiation')
 
 
 _COUNTRY_CONFIG = {
@@ -133,42 +151,112 @@ def _leads_generator_fetch(*, keyword: str, state: str = '', city: str = '', max
     return out
 
 
-def dashboard(request):
-    contacts = Contact.objects.all()
-    deals = Deal.objects.all()
-    total_contacts = contacts.exclude(status='inactive').count()
-    total_deals = deals.count()
-    pipeline_value = deals.filter(stage__in=['prospecting', 'proposal', 'negotiation']).aggregate(total=Sum('value'))['total'] or 0
-    pipeline_value += Contact.objects.filter(status='prospect').aggregate(total=Sum('estimated_value'))['total'] or 0
-    won_value = deals.filter(stage='won').aggregate(total=Sum('value'))['total'] or 0
-    stage_data = [(stage, deals.filter(stage=stage).count(), label) for stage, label in Deal.STAGE_CHOICES]
-    recent_contacts = contacts[:5]
-    recent_deals = deals[:5]
-    context = {
-        'total_contacts': total_contacts,
-        'total_deals': total_deals,
-        'pipeline_value': pipeline_value,
-        'won_value': won_value,
-        'stage_data': stage_data,
-        'recent_contacts': recent_contacts,
-        'recent_deals': recent_deals,
-    }
-    return render(request, 'crm/dashboard.html', context)
+# ── Helpers ─────────────────────────────────────────────────────────────────
 
+def _json_body(request):
+    """Parse a JSON request body. Returns (data, error_response)."""
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return None, JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if not isinstance(data, dict):
+        return None, JsonResponse({'error': 'Invalid JSON'}, status=400)
+    return data, None
+
+
+def _paginate(request, queryset):
+    page = Paginator(queryset, PAGE_SIZE).get_page(request.GET.get('page'))
+    params = request.GET.copy()
+    params.pop('page', None)
+    return page, params.urlencode()
+
+
+def _list_url_for(contact):
+    if contact.status == 'inactive':
+        return reverse('inactive_leads')
+    if contact.pipeline == 'driveops':
+        return reverse('driveops')
+    return reverse('sa_leads' if contact.region == 'sa' else 'us_leads')
+
+
+def _csv_cell(value):
+    """Stringify for CSV; neutralise leading characters spreadsheets would run as a formula."""
+    text = '' if value is None else str(value)
+    return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
+
+
+def _contacts_csv(queryset, filename):
+    """Download the given contacts as CSV (Zoho/HubSpot-style list export)."""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow(['Name', 'Company', 'Phone', 'Email', 'Status', 'Lost reason', 'Pipeline', 'Region',
+                     'Owner', 'Estimated value', 'Created'])
+    for c in queryset.select_related('owner').iterator():
+        writer.writerow([_csv_cell(v) for v in (
+            c.name, c.company, c.phone, c.email, c.get_status_display(), c.get_lost_reason_display(),
+            c.get_pipeline_display(), c.get_region_display(), c.owner.get_username() if c.owner else '',
+            c.estimated_value, timezone.localtime(c.created_at).strftime('%Y-%m-%d'),
+        )])
+    return response
+
+
+# ── Dashboard ───────────────────────────────────────────────────────────────
+
+def dashboard(request):
+    today = timezone.localdate()
+    start_of_today = timezone.make_aware(datetime.combine(today, time.min))
+    end_of_today = start_of_today + timedelta(days=1)
+
+    deal_totals = Deal.objects.aggregate(
+        total=Count('id'),
+        open_value=Sum('value', filter=Q(stage__in=OPEN_DEAL_STAGES)),
+        won_value=Sum('value', filter=Q(stage='won')),
+    )
+    stage_counts = dict(Deal.objects.values_list('stage').annotate(n=Count('id')).order_by())
+    prospect_value = Contact.objects.filter(status='prospect').aggregate(total=Sum('estimated_value'))['total'] or 0
+
+    my_meetings = Meeting.objects.filter(completed=False).select_related('contact')
+    if Contact.objects.filter(owner=request.user).exists():
+        my_meetings = my_meetings.filter(Q(contact__owner=request.user) | Q(contact__owner__isnull=True))
+
+    return render(request, 'crm/dashboard.html', {
+        'total_contacts': Contact.objects.exclude(status='inactive').count(),
+        'total_deals': deal_totals['total'],
+        'pipeline_value': (deal_totals['open_value'] or 0) + prospect_value,
+        'won_value': deal_totals['won_value'] or 0,
+        'stage_data': [(stage, stage_counts.get(stage, 0), label) for stage, label in Deal.STAGE_CHOICES],
+        'recent_contacts': Contact.objects.all()[:5],
+        'recent_deals': Deal.objects.select_related('contact')[:5],
+        'todays_meetings': my_meetings.filter(scheduled_at__gte=start_of_today, scheduled_at__lt=end_of_today),
+        'overdue_meetings': my_meetings.filter(scheduled_at__lt=start_of_today).order_by('-scheduled_at')[:10],
+        'no_next_step_count': _without_next_step(
+            Contact.objects.filter(status__in=Contact.FOLLOW_UP_STATUSES, owner=request.user)
+        ).count(),
+    })
+
+
+def _without_next_step(queryset):
+    """Leads that need a follow-up but have no open meeting scheduled (Pipedrive's 'no next activity')."""
+    return queryset.exclude(meetings__completed=False)
+
+
+# ── Leads ───────────────────────────────────────────────────────────────────
 
 def _filter_contacts(request, queryset):
-    q = request.GET.get('q', '')
+    q = request.GET.get('q', '').strip()
     status = request.GET.get('status', '')
     if q:
-        queryset = queryset.filter(Q(name__icontains=q) | Q(email__icontains=q) | Q(company__icontains=q))
+        queryset = queryset.filter(
+            Q(name__icontains=q) | Q(email__icontains=q) | Q(company__icontains=q) | Q(phone__icontains=q)
+        )
     if status:
         queryset = queryset.filter(status=status)
-    return queryset.prefetch_related('deals'), q, status
+    return queryset, q, status
 
 
 def contact_list(request):
-    contacts = Contact.objects.all()
-    contacts, q, status = _filter_contacts(request, contacts)
+    contacts, q, status = _filter_contacts(request, Contact.objects.annotate(deal_count=Count('deals')).order_by('-created_at'))
     return render(request, 'crm/contact_list.html', {
         'us_contacts': contacts.filter(region='us'),
         'sa_contacts': contacts.filter(region='sa'),
@@ -178,160 +266,138 @@ def contact_list(request):
     })
 
 
-def _duplicate_phone_ids(region):
-    """Return a set of Contact PKs that are active but share a phone with:
-    - another active contact in the same region, OR
-    - any inactive contact (any region).
-    """
-    from django.db.models import Count
-
-    # Phones that appear more than once among active contacts in this region
-    active_dup_phones = set(
-        Contact.objects.filter(region=region)
-        .exclude(status='inactive')
-        .exclude(phone='')
-        .values('phone')
-        .annotate(n=Count('id'))
-        .filter(n__gt=1)
-        .values_list('phone', flat=True)
+def _active_phone_duplicates(pipeline, region=None):
+    """Active contacts in this pipeline (and region, if given) whose normalised phone matches another
+    active contact in the same list, or any inactive contact (any region)."""
+    active = Contact.objects.filter(pipeline=pipeline).exclude(status='inactive').exclude(phone_normalized='')
+    if region:
+        active = active.filter(region=region)
+    inactive_phones = Contact.objects.filter(status='inactive').exclude(phone_normalized='').values('phone_normalized')
+    repeated_phones = (
+        active.values('phone_normalized').annotate(n=Count('id')).filter(n__gt=1).values('phone_normalized')
     )
-
-    # Phones belonging to any inactive contact
-    inactive_phones = set(
-        Contact.objects.filter(status='inactive')
-        .exclude(phone='')
-        .values_list('phone', flat=True)
-    )
-
-    all_flagged_phones = active_dup_phones | inactive_phones
-
-    if not all_flagged_phones:
-        return set()
-
-    return set(
-        Contact.objects.filter(region=region, phone__in=all_flagged_phones)
-        .exclude(status='inactive')
-        .values_list('id', flat=True)
-    )
+    return active.filter(Q(phone_normalized__in=inactive_phones) | Q(phone_normalized__in=repeated_phones))
 
 
-def _dedup_phones(region):
-    """Delete active contacts in the region whose phone matches:
-    - an inactive contact (any region) — always deleted, inactive takes precedence, OR
-    - another active contact in the same region — keep oldest, delete the rest.
-    Returns count of deleted contacts.
-    """
-    from django.db.models import Count
+def _merge_phone_duplicates(pipeline, region=None):
+    """Merge the duplicates found by _active_phone_duplicates. If an inactive contact has the phone it
+    survives (the lead was already ruled out); otherwise the oldest active contact does. Notes, meetings
+    and history from the others move onto the survivor. Returns how many contacts were merged away."""
+    groups = {}
+    for contact in _active_phone_duplicates(pipeline, region).order_by('created_at', 'pk'):
+        groups.setdefault(contact.phone_normalized, []).append(contact)
+    inactive_by_phone = {}
+    for contact in Contact.objects.filter(status='inactive', phone_normalized__in=groups).order_by('-created_at'):
+        inactive_by_phone[contact.phone_normalized] = contact  # oldest wins
+    merged = 0
+    for phone, contacts in groups.items():
+        survivor = inactive_by_phone.get(phone) or contacts[0]
+        merged += merge_contacts(survivor, contacts)
+    return merged
 
-    inactive_phones = set(
-        Contact.objects.filter(status='inactive')
-        .exclude(phone='')
-        .values_list('phone', flat=True)
-    )
 
-    deleted = 0
+def _merged_message(request, merged):
+    messages.success(request, f'Merged {merged} duplicate lead{"" if merged == 1 else "s"} — notes and history were kept.')
 
-    # Delete active contacts that share a phone with an inactive contact
-    if inactive_phones:
-        to_delete = Contact.objects.filter(region=region, phone__in=inactive_phones).exclude(status='inactive')
-        deleted += to_delete.count()
-        to_delete.delete()
 
-    # Among remaining active contacts, deduplicate by phone (keep oldest)
-    active_dup_phones = (
-        Contact.objects.filter(region=region)
-        .exclude(status='inactive')
-        .exclude(phone='')
-        .values('phone')
-        .annotate(n=Count('id'))
-        .filter(n__gt=1)
-        .values_list('phone', flat=True)
-    )
-    for phone in active_dup_phones:
-        dupes = list(
-            Contact.objects.filter(region=region, phone=phone)
-            .exclude(status='inactive')
-            .order_by('created_at')
-        )
-        for contact in dupes[1:]:
-            contact.delete()
-            deleted += 1
+def _region_leads(request, region):
+    url_name = f'{region}_leads'
+    if request.method == 'POST' and request.POST.get('action') == 'dedup_phones':
+        _merged_message(request, _merge_phone_duplicates('general', region))
+        return redirect(url_name)
 
-    return deleted
+    base = Contact.objects.filter(region=region, pipeline='general').exclude(status='inactive')
+    contacts, q, status = _filter_contacts(request, base.select_related('owner').annotate(deal_count=Count('deals')).order_by('-created_at'))
+    if request.GET.get('export') == 'csv':
+        return _contacts_csv(contacts, f'{region}-leads.csv')
+    page, querystring = _paginate(request, contacts)
+    return render(request, 'crm/region_leads.html', {
+        'contacts': page,
+        'page_obj': page,
+        'querystring': querystring,
+        'q': q,
+        'status': status,
+        'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
+        'region': region,
+        'region_label': f'{region.upper()} Leads',
+        'clear_url': url_name,
+        'duplicate_phone_ids': set(_active_phone_duplicates('general', region).values_list('pk', flat=True)),
+    })
 
 
 def us_leads(request):
-    if request.method == 'POST' and request.POST.get('action') == 'dedup_phones':
-        deleted = _dedup_phones('us')
-        from django.contrib import messages
-        messages.success(request, f'Removed {deleted} duplicate phone entr{"y" if deleted == 1 else "ies"}.')
-        return redirect('us_leads')
-
-    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='us').exclude(status='inactive'))
-    return render(request, 'crm/region_leads.html', {
-        'contacts': contacts,
-        'q': q,
-        'status': status,
-        'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
-        'region': 'us',
-        'region_label': 'US Leads',
-        'clear_url': 'us_leads',
-        'duplicate_phone_ids': _duplicate_phone_ids('us'),
-    })
+    return _region_leads(request, 'us')
 
 
 def sa_leads(request):
-    if request.method == 'POST' and request.POST.get('action') == 'dedup_phones':
-        deleted = _dedup_phones('sa')
-        from django.contrib import messages
-        messages.success(request, f'Removed {deleted} duplicate phone entr{"y" if deleted == 1 else "ies"}.')
-        return redirect('sa_leads')
-
-    contacts, q, status = _filter_contacts(request, Contact.objects.filter(region='sa').exclude(status='inactive').exclude(company__icontains='driving school'))
-    return render(request, 'crm/region_leads.html', {
-        'contacts': contacts,
-        'q': q,
-        'status': status,
-        'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
-        'region': 'sa',
-        'region_label': 'SA Leads',
-        'clear_url': 'sa_leads',
-        'duplicate_phone_ids': _duplicate_phone_ids('sa'),
-    })
+    return _region_leads(request, 'sa')
 
 
 def inactive_leads(request):
-    contacts, q, _ = _filter_contacts(request, Contact.objects.filter(status='inactive'))
+    contacts, q, _ = _filter_contacts(request, Contact.objects.filter(status='inactive').select_related('owner'))
+    if request.GET.get('export') == 'csv':
+        return _contacts_csv(contacts, 'inactive-leads.csv')
+    page, querystring = _paginate(request, contacts)
     return render(request, 'crm/inactive_leads.html', {
-        'contacts': contacts,
+        'contacts': page,
+        'page_obj': page,
+        'querystring': querystring,
         'q': q,
     })
 
 
 def contact_detail(request, pk):
-    contact = get_object_or_404(Contact, pk=pk)
+    contact = get_object_or_404(Contact.objects.select_related('owner'), pk=pk)
     note_form = NoteForm()
     if request.method == 'POST':
         note_form = NoteForm(request.POST)
         if note_form.is_valid():
             note = note_form.save(commit=False)
             note.contact = contact
+            note.created_by = request.user
             note.save()
             return redirect('contact_detail', pk=pk)
+
+    # Unified activity timeline (HubSpot-style): notes, status changes, meetings and emails.
+    timeline = []
+    for note in contact.notes.select_related('created_by'):
+        timeline.append({'kind': 'note', 'at': note.created_at, 'obj': note})
+    for log in contact.status_logs.select_related('changed_by'):
+        timeline.append({
+            'kind': 'status', 'at': log.changed_at, 'obj': log,
+            'from_label': dict(Contact.STATUS_CHOICES).get(log.from_status, log.from_status),
+            'to_label': dict(Contact.STATUS_CHOICES).get(log.to_status, log.to_status),
+        })
+    for meeting in contact.meetings.all():
+        timeline.append({'kind': 'meeting', 'at': meeting.scheduled_at, 'obj': meeting})
+    for send in contact.email_sends.select_related('campaign').exclude(status='pending'):
+        timeline.append({'kind': 'email', 'at': send.sent_at or send.campaign.created_at, 'obj': send})
+    timeline.sort(key=lambda item: item['at'], reverse=True)
+
+    deals = list(contact.deals.all())
     return render(request, 'crm/contact_detail.html', {
         'contact': contact,
         'note_form': note_form,
+        'timeline': timeline,
+        'deals': deals,
+        'upcoming_meetings': contact.meetings.filter(completed=False).order_by('scheduled_at'),
+        'needs_follow_up': contact.status in Contact.FOLLOW_UP_STATUSES,
+        'now': timezone.now(),
     })
 
 
 def contact_create(request):
-    initial = {}
+    initial = {'owner': request.user}
     region = request.GET.get('region')
     if region in ('us', 'sa'):
         initial['region'] = region
+    if request.GET.get('pipeline') in dict(Contact.PIPELINE_CHOICES):
+        initial['pipeline'] = request.GET['pipeline']
     form = ContactForm(request.POST or None, initial=initial)
     if form.is_valid():
-        contact = form.save()
+        contact = form.save(commit=False)
+        contact._changed_by = request.user
+        contact.save()
         return redirect('contact_detail', pk=contact.pk)
     return render(request, 'crm/contact_form.html', {'form': form, 'title': 'Add Lead'})
 
@@ -340,7 +406,9 @@ def contact_edit(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
     form = ContactForm(request.POST or None, instance=contact)
     if form.is_valid():
-        form.save()
+        contact = form.save(commit=False)
+        contact._changed_by = request.user
+        contact.save()
         return redirect('contact_detail', pk=pk)
     return render(request, 'crm/contact_form.html', {'form': form, 'title': 'Edit Lead', 'contact': contact})
 
@@ -348,10 +416,13 @@ def contact_edit(request, pk):
 def contact_delete(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
     if request.method == 'POST':
+        next_url = _list_url_for(contact)
         contact.delete()
-        return redirect('contact_list')
+        return redirect(next_url)
     return render(request, 'crm/contact_confirm_delete.html', {'contact': contact})
 
+
+# ── Deals ───────────────────────────────────────────────────────────────────
 
 def deal_list(request):
     deals = Deal.objects.select_related('contact').all()
@@ -370,13 +441,14 @@ def deal_list(request):
 
 
 def deal_detail(request, pk):
-    deal = get_object_or_404(Deal, pk=pk)
+    deal = get_object_or_404(Deal.objects.select_related('contact'), pk=pk)
     note_form = NoteForm()
     if request.method == 'POST':
         note_form = NoteForm(request.POST)
         if note_form.is_valid():
             note = note_form.save(commit=False)
             note.deal = deal
+            note.created_by = request.user
             note.save()
             return redirect('deal_detail', pk=pk)
     return render(request, 'crm/deal_detail.html', {
@@ -386,7 +458,10 @@ def deal_detail(request, pk):
 
 
 def deal_create(request):
-    form = DealForm(request.POST or None)
+    initial = {}
+    if request.GET.get('contact', '').isdigit():
+        initial['contact'] = request.GET['contact']
+    form = DealForm(request.POST or None, initial=initial)
     if form.is_valid():
         deal = form.save()
         return redirect('deal_detail', pk=deal.pk)
@@ -410,43 +485,38 @@ def deal_delete(request, pk):
     return render(request, 'crm/deal_confirm_delete.html', {'deal': deal})
 
 
+# ── Calendar ────────────────────────────────────────────────────────────────
+
 def calendar_view(request):
-    today = date.today()
+    today = timezone.localdate()
     days = [today + timedelta(days=i) for i in range(5)]
     meetings = Meeting.objects.filter(
         scheduled_at__date__gte=today,
-        scheduled_at__date__lte=today + timedelta(days=4),
+        scheduled_at__date__lte=days[-1],
         completed=False,
     ).select_related('contact')
     day_meetings = {d: [] for d in days}
     for m in meetings:
-        d = m.scheduled_at.date()
-        if d in day_meetings:
-            day_meetings[d].append(m)
+        day_meetings[timezone.localtime(m.scheduled_at).date()].append(m)
 
-    todo_blocks = TodoBlock.objects.filter(date__gte=today, date__lte=today + timedelta(days=4))
     day_todos = {d: [] for d in days}
-    for tb in todo_blocks:
-        if tb.date in day_todos:
-            day_todos[tb.date].append(tb)
+    for tb in TodoBlock.objects.filter(date__gte=today, date__lte=days[-1]):
+        day_todos[tb.date].append(tb)
 
-    # Build meeting times per day as JSON for conflict checking in JS
-    meeting_times_by_day = {}
-    for d in days:
-        meeting_times_by_day[d.isoformat()] = [
-            m.scheduled_at.strftime('%H:%M') for m in day_meetings[d]
-        ]
+    # Meeting times per day as JSON for conflict checking in JS
+    meeting_times_by_day = {
+        d.isoformat(): [timezone.localtime(m.scheduled_at).strftime('%H:%M') for m in day_meetings[d]] for d in days
+    }
 
-    # Fetch past meetings (last 7 days) for drag-to-reschedule
+    # Past meetings (last 7 days) that were never completed, for rescheduling
     past_meetings = Meeting.objects.filter(
         scheduled_at__date__gte=today - timedelta(days=7),
         scheduled_at__date__lt=today,
         completed=False,
     ).select_related('contact').order_by('scheduled_at')
 
-    day_data = [(d, day_meetings[d], day_todos[d]) for d in days]
     return render(request, 'crm/calendar.html', {
-        'day_data': day_data,
+        'day_data': [(d, day_meetings[d], day_todos[d]) for d in days],
         'today': today,
         'meeting_times_json': json.dumps(meeting_times_by_day),
         'past_meetings': past_meetings,
@@ -454,9 +524,19 @@ def calendar_view(request):
 
 
 def meeting_create(request):
-    form = MeetingForm(request.POST or None)
+    initial = {}
+    date_str = request.GET.get('date', '')
+    try:
+        initial['scheduled_at'] = datetime.combine(datetime.strptime(date_str, '%Y-%m-%d').date(), time(9, 0))
+    except ValueError:
+        pass
+    if request.GET.get('contact', '').isdigit():
+        initial['contact'] = request.GET['contact']
+    form = MeetingForm(request.POST or None, initial=initial)
     if form.is_valid():
-        form.save()
+        meeting = form.save()
+        if request.GET.get('next') == 'contact':
+            return redirect('contact_detail', pk=meeting.contact_id)
         return redirect('calendar')
     return render(request, 'crm/meeting_form.html', {'form': form, 'title': 'Log Meeting'})
 
@@ -478,23 +558,20 @@ def meeting_delete(request, pk):
     return render(request, 'crm/meeting_confirm_delete.html', {'meeting': meeting})
 
 
+@require_POST
 def meeting_complete(request, pk):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
     meeting = get_object_or_404(Meeting, pk=pk)
     meeting.completed = not meeting.completed
-    meeting.save()
+    meeting.save(update_fields=['completed'])
     return JsonResponse({'ok': True, 'completed': meeting.completed})
 
 
+@require_POST
 def meeting_reschedule(request, pk):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    meeting = get_object_or_404(Meeting, pk=pk)
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    meeting = get_object_or_404(Meeting.objects.select_related('contact'), pk=pk)
+    data, error = _json_body(request)
+    if error:
+        return error
     target_date_str = data.get('date')
     if not target_date_str:
         return JsonResponse({'error': 'Missing date'}, status=400)
@@ -502,14 +579,14 @@ def meeting_reschedule(request, pk):
         target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
     except ValueError:
         return JsonResponse({'error': 'Invalid date format'}, status=400)
-    old_dt = meeting.scheduled_at
-    meeting.scheduled_at = old_dt.replace(year=target_date.year, month=target_date.month, day=target_date.day)
-    meeting.save()
+    local_dt = timezone.localtime(meeting.scheduled_at)
+    meeting.scheduled_at = local_dt.replace(year=target_date.year, month=target_date.month, day=target_date.day)
+    meeting.save(update_fields=['scheduled_at'])
     return JsonResponse({
         'ok': True,
         'pk': meeting.pk,
         'title': meeting.title,
-        'time': meeting.scheduled_at.strftime('%H:%M'),
+        'time': timezone.localtime(meeting.scheduled_at).strftime('%H:%M'),
         'contact': meeting.contact.name,
         'phone': meeting.contact.phone or '',
         'meeting_type': meeting.meeting_type,
@@ -518,43 +595,38 @@ def meeting_reschedule(request, pk):
     })
 
 
+@require_POST
 def todo_block_create(request):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    data = json.loads(request.body)
-    date_str = data.get('date')
-    start_str = data.get('start_time')
-    end_str = data.get('end_time')
+    data, error = _json_body(request)
+    if error:
+        return error
     title = (data.get('title') or '').strip()
     color = data.get('color', 'blue')
-
-    if not all([date_str, start_str, end_str, title]):
+    try:
+        block_date = datetime.strptime(data.get('date') or '', '%Y-%m-%d').date()
+        start_t = datetime.strptime(data.get('start_time') or '', '%H:%M').time()
+        end_t = datetime.strptime(data.get('end_time') or '', '%H:%M').time()
+    except ValueError:
+        return JsonResponse({'error': 'Missing or invalid date/time'}, status=400)
+    if not title:
         return JsonResponse({'error': 'Missing fields'}, status=400)
-
-    block_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    start_t = datetime.strptime(start_str, '%H:%M').time()
-    end_t = datetime.strptime(end_str, '%H:%M').time()
-
     if end_t <= start_t:
         return JsonResponse({'error': 'End time must be after start time'}, status=400)
 
-    # Check meeting conflicts: cannot start within 30 min of any meeting start on that day
-    for m in Meeting.objects.filter(scheduled_at__date=block_date):
-        meeting_start = m.scheduled_at.time().replace(second=0, microsecond=0)
+    # Cannot start within 30 min after any meeting start on that day
+    block_start = datetime.combine(block_date, start_t)
+    for m in Meeting.objects.filter(scheduled_at__date=block_date, completed=False):
+        meeting_start = timezone.localtime(m.scheduled_at).time().replace(second=0, microsecond=0)
         m_start_dt = datetime.combine(block_date, meeting_start)
-        s_start_dt = datetime.combine(block_date, start_t)
-        if m_start_dt <= s_start_dt < m_start_dt + timedelta(minutes=30):
+        if m_start_dt <= block_start < m_start_dt + timedelta(minutes=30):
             return JsonResponse({
                 'error': f'Blocked: meeting "{m.title}" at {meeting_start.strftime("%H:%M")} (30 min buffer)'
             }, status=400)
 
-    valid_colors = [c[0] for c in TodoBlock.COLOR_CHOICES]
-    if color not in valid_colors:
+    if color not in dict(TodoBlock.COLOR_CHOICES):
         color = 'blue'
 
-    block = TodoBlock.objects.create(
-        date=block_date, start_time=start_t, end_time=end_t, title=title, color=color
-    )
+    block = TodoBlock.objects.create(date=block_date, start_time=start_t, end_time=end_t, title=title, color=color)
     return JsonResponse({
         'id': block.pk,
         'title': block.title,
@@ -564,11 +636,9 @@ def todo_block_create(request):
     })
 
 
+@require_POST
 def todo_block_delete(request, pk):
-    block = get_object_or_404(TodoBlock, pk=pk)
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    block.delete()
+    get_object_or_404(TodoBlock, pk=pk).delete()
     return JsonResponse({'ok': True})
 
 
@@ -584,48 +654,130 @@ def note_delete(request, pk):
     return render(request, 'crm/note_confirm_delete.html', {'note': note})
 
 
+# ── DriveOps ────────────────────────────────────────────────────────────────
+
+DRIVEOPS_SCOPES = [('mine', 'My leads'), ('unassigned', 'Unassigned'), ('all', 'Everyone')]
+
+
 def driveops_view(request):
-    q = request.GET.get('q', '')
-    status = request.GET.get('status', 'lead')  # default to leads
-    contacts = Contact.objects.filter(
-        company__icontains='driving school'
-    ).exclude(status='inactive')
+    if request.method == 'POST' and request.POST.get('action') == 'merge_duplicates':
+        _merged_message(request, _merge_phone_duplicates('driveops'))
+        return redirect(request.get_full_path())
+    expire_one_week_prospects()
+
+    q = request.GET.get('q', '').strip()
+    status = request.GET.get('status', 'lead')  # default to unworked leads
+    scope = request.GET.get('scope', 'mine')
+    if scope not in dict(DRIVEOPS_SCOPES):
+        scope = 'mine'
+
+    base = Contact.objects.filter(pipeline='driveops').exclude(status='inactive')
+    contacts = base
+    if scope == 'mine':
+        contacts = contacts.filter(owner=request.user)
+    elif scope == 'unassigned':
+        contacts = contacts.filter(owner__isnull=True)
     if q:
         contacts = contacts.filter(Q(name__icontains=q) | Q(company__icontains=q) | Q(phone__icontains=q))
     if status:
         contacts = contacts.filter(status=status)
+
+    if request.GET.get('export') == 'csv':
+        return _contacts_csv(contacts.order_by('pk'), 'driveops-leads.csv')
+
+    contacts = contacts.select_related('owner').annotate(
+        next_meeting_at=Min('meetings__scheduled_at', filter=Q(meetings__completed=False)),
+    ).order_by('pk')
+    page, querystring = _paginate(request, contacts)
+
     return render(request, 'crm/driveops.html', {
-        'contacts': contacts,
+        'contacts': page,
+        'page_obj': page,
+        'querystring': querystring,
         'q': q,
         'status': status,
+        'scope': scope,
+        'scopes': DRIVEOPS_SCOPES,
         'status_choices': [c for c in Contact.STATUS_CHOICES if c[0] != 'inactive'],
+        'follow_up_statuses': Contact.FOLLOW_UP_STATUSES,
+        'unassigned_count': base.filter(owner__isnull=True).count(),
+        'duplicate_phone_ids': set(_active_phone_duplicates('driveops').values_list('pk', flat=True)),
+        'lost_reasons': Contact.LOST_REASON_CHOICES,
+        'reps': get_user_model().objects.filter(is_active=True).order_by('username'),
+        'now': timezone.now(),
     })
 
 
+@require_POST
+def driveops_bulk(request):
+    """Apply one action to many selected DriveOps leads (Monday/HubSpot-style bulk edit)."""
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = reverse('driveops')
+    ids = [i for i in request.POST.getlist('contact_ids') if i.isdigit()]
+    contacts = Contact.objects.filter(pk__in=ids, pipeline='driveops')
+    if not ids:
+        messages.error(request, 'Select at least one lead.')
+        return redirect(next_url)
+
+    action = request.POST.get('action')
+    if action == 'assign':
+        owner_id = request.POST.get('owner', '')
+        owner = get_object_or_404(get_user_model(), pk=owner_id, is_active=True) if owner_id else None
+        updated = contacts.update(owner=owner, updated_at=timezone.now())
+        who = owner.get_username() if owner else 'nobody'
+        messages.success(request, f'Assigned {updated} lead{"" if updated == 1 else "s"} to {who}.')
+    elif action == 'status':
+        new_status = request.POST.get('status', '')
+        lost_reason = request.POST.get('lost_reason', '')
+        done, errors = 0, set()
+        for contact in contacts:
+            error = change_status(contact, new_status, request.user, lost_reason)
+            if error:
+                errors.add(error)
+            else:
+                done += 1
+        if done:
+            messages.success(request, f'Updated {done} lead{"" if done == 1 else "s"}.')
+        for error in errors:
+            messages.error(request, f'Some leads were skipped: {error}')
+    else:
+        messages.error(request, 'Unknown bulk action.')
+    return redirect(next_url)
+
+
+# Scheduling moves a lead forward, never backwards: only these statuses get promoted.
+_SCHEDULE_PROMOTIONS = {
+    'call': ({'lead', 'call_back_no_answer'}, 'call_back'),
+    'video': ({'lead', 'call_back', 'call_back_no_answer'}, 'prospect'),
+}
+
+
+@require_POST
 def driveops_schedule(request, pk):
     """AJAX: create a calendar entry (Meeting) for a DriveOps contact."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
     contact = get_object_or_404(Contact, pk=pk)
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    data, error = _json_body(request)
+    if error:
+        return error
     meeting_type = data.get('meeting_type', 'call')
-    date_str = data.get('date', '')
-    time_str = data.get('time', '')
-    if not date_str or not time_str:
-        return JsonResponse({'error': 'Date and time are required'}, status=400)
-    if meeting_type not in ('call', 'video'):
+    if meeting_type not in _SCHEDULE_PROMOTIONS:
         meeting_type = 'call'
     try:
-        scheduled_at = datetime.strptime(f'{date_str} {time_str}', '%Y-%m-%d %H:%M')
+        naive = datetime.strptime(f"{data.get('date', '')} {data.get('time', '')}", '%Y-%m-%d %H:%M')
     except ValueError:
-        return JsonResponse({'error': 'Invalid date/time format'}, status=400)
-    contact.status = 'call_back' if meeting_type == 'call' else 'prospect'
-    contact.save()
+        return JsonResponse({'error': 'Date and time are required'}, status=400)
+    scheduled_at = timezone.make_aware(naive)
+
+    promote_from, promote_to = _SCHEDULE_PROMOTIONS[meeting_type]
+    if contact.status in promote_from:
+        change_status(contact, promote_to, request.user)
+    elif contact.owner_id is None:
+        contact.owner = request.user
+        contact.save(update_fields=['owner', 'updated_at'])
+
     type_label = 'Call' if meeting_type == 'call' else 'Video Call'
-    title = data.get('title', '').strip() or f'{type_label} with {contact.name}'
+    title = (data.get('title') or '').strip() or f'{type_label} with {contact.name}'
     meeting = Meeting.objects.create(
         title=title,
         contact=contact,
@@ -636,176 +788,177 @@ def driveops_schedule(request, pk):
         'ok': True,
         'meeting_id': meeting.pk,
         'title': meeting.title,
-        'scheduled_at': meeting.scheduled_at.strftime('%Y-%m-%d %H:%M'),
+        'scheduled_at': naive.strftime('%Y-%m-%d %H:%M'),
+        'status': contact.status,
+        'status_display': contact.get_status_display(),
     })
 
 
 def driveops_analytics(request):
-    from django.utils import timezone
+    expire_one_week_prospects()
     today = timezone.localdate()
     now = timezone.now()
-    start_of_today = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+    start_of_today = timezone.make_aware(datetime.combine(today, time.min))
+    week_start = start_of_today - timedelta(days=6)
 
-    ds_contacts = Contact.objects.filter(company__icontains='driving school')
+    ds_contacts = Contact.objects.filter(pipeline='driveops')
 
-    # ── Current status breakdown ────────────────────────────────
-    current_leads                 = ds_contacts.filter(status='lead').count()
-    current_callbacks             = ds_contacts.filter(status='call_back').count()
-    current_callback_no_answer    = ds_contacts.filter(status='call_back_no_answer').count()
-    current_prospects             = ds_contacts.filter(status='prospect').count()
-    current_prospect_1_week       = ds_contacts.filter(status='prospect_1_week').count()
-    current_inactive              = ds_contacts.filter(status='inactive').count()
-    current_customers             = ds_contacts.filter(status='customer').count()
-    total_active                  = ds_contacts.exclude(status='inactive').count()
+    # ── Current status breakdown (one query) ────────────────────
+    counts = dict(ds_contacts.values_list('status').annotate(n=Count('id')).order_by())
+    total_active = sum(n for s, n in counts.items() if s != 'inactive')
 
-    # ── Today's status change activity ──────────────────────────
-    # Only look at logs for driving-school contacts
-    ds_pks = list(ds_contacts.values_list('pk', flat=True))
-    today_logs = ContactStatusLog.objects.filter(
-        contact_id__in=ds_pks,
-        changed_at__gte=start_of_today,
-    )
-    converted_to_callback_today            = today_logs.filter(to_status='call_back').count()
-    converted_to_callback_no_answer_today  = today_logs.filter(to_status='call_back_no_answer').count()
-    converted_to_prospect_today            = today_logs.filter(to_status='prospect').count()
-    converted_to_prospect_1_week_today     = today_logs.filter(to_status='prospect_1_week').count()
-    converted_to_inactive_today            = today_logs.filter(to_status='inactive').count()
-    # Start-of-day leads = current leads + everything that moved OUT of lead today
-    moved_out_of_lead_today = today_logs.filter(from_status='lead').count()
-    start_of_day_leads = current_leads + moved_out_of_lead_today
+    # ── Status change activity for the last 7 days (one query) ──
+    week_logs = ContactStatusLog.objects.filter(contact__pipeline='driveops', changed_at__gte=week_start)
+    per_day = {}
+    for day, to_status, n in (
+        week_logs.annotate(day=TruncDate('changed_at')).values_list('day', 'to_status').annotate(n=Count('id')).order_by()
+    ):
+        per_day.setdefault(day, {})[to_status] = n
 
-    # ── Prospect — 1 Week queue with days remaining ─────────────
-    p1w_contacts = ds_contacts.filter(status='prospect_1_week').order_by('updated_at')
-    prospect_1_week_queue = []
-    for c in p1w_contacts:
-        log_entry = ContactStatusLog.objects.filter(
-            contact=c, to_status='prospect_1_week'
-        ).order_by('-changed_at').first()
-        since = log_entry.changed_at if log_entry else c.updated_at
-        elapsed_days = (now - since).days
-        days_remaining = max(0, 7 - elapsed_days)
-        prospect_1_week_queue.append({
-            'contact': c,
-            'since': since,
-            'days_remaining': days_remaining,
-        })
-
-    # ── Callback queue with duration ────────────────────────────
-    callback_contacts = ds_contacts.filter(status='call_back').order_by('updated_at')
-    callback_queue = []
-    for c in callback_contacts:
-        # Find most recent log entry that set this contact to call_back
-        log_entry = ContactStatusLog.objects.filter(
-            contact=c, to_status='call_back'
-        ).order_by('-changed_at').first()
-        since = log_entry.changed_at if log_entry else c.updated_at
-        delta = now - since
-        days = delta.days
-        hours = delta.seconds // 3600
-        if days > 0:
-            duration_str = f'{days}d {hours}h'
-        elif hours > 0:
-            duration_str = f'{hours}h {(delta.seconds % 3600) // 60}m'
-        else:
-            duration_str = f'{(delta.seconds % 3600) // 60}m'
-        callback_queue.append({'contact': c, 'since': since, 'duration': duration_str, 'days': days})
-
-    # ── Prospect queue with duration ────────────────────────────
-    prospect_contacts = ds_contacts.filter(status='prospect').order_by('updated_at')
-    prospect_queue = []
-    for c in prospect_contacts:
-        log_entry = ContactStatusLog.objects.filter(
-            contact=c, to_status='prospect'
-        ).order_by('-changed_at').first()
-        since = log_entry.changed_at if log_entry else c.updated_at
-        delta = now - since
-        days = delta.days
-        hours = delta.seconds // 3600
-        duration_str = f'{days}d {hours}h' if days > 0 else (f'{hours}h' if hours > 0 else f'{(delta.seconds % 3600) // 60}m')
-        prospect_queue.append({'contact': c, 'since': since, 'duration': duration_str, 'days': days})
-
-    # ── 7-day daily activity ─────────────────────────────────────
+    tracked = ['call_back', 'call_back_no_answer', 'prospect', 'prospect_1_week', 'inactive', 'customer']
     seven_days = []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
-        day_start = timezone.make_aware(datetime.combine(day, datetime.min.time()))
-        day_end   = timezone.make_aware(datetime.combine(day + timedelta(days=1), datetime.min.time()))
-        day_logs  = ContactStatusLog.objects.filter(contact_id__in=ds_pks, changed_at__gte=day_start, changed_at__lt=day_end)
+        day_counts = per_day.get(day, {})
         seven_days.append({
             'date': day,
-            'label': day.strftime('%a %-d %b') if day != today else 'Today',
-            'to_callback': day_logs.filter(to_status='call_back').count(),
-            'to_callback_no_answer': day_logs.filter(to_status='call_back_no_answer').count(),
-            'to_prospect': day_logs.filter(to_status='prospect').count(),
-            'to_prospect_1_week': day_logs.filter(to_status='prospect_1_week').count(),
-            'to_inactive': day_logs.filter(to_status='inactive').count(),
+            'label': 'Today' if day == today else day.strftime('%a %-d %b'),
+            'to_callback': day_counts.get('call_back', 0),
+            'to_callback_no_answer': day_counts.get('call_back_no_answer', 0),
+            'to_prospect': day_counts.get('prospect', 0),
+            'to_prospect_1_week': day_counts.get('prospect_1_week', 0),
+            'to_inactive': day_counts.get('inactive', 0),
+            'to_customer': day_counts.get('customer', 0),
         })
+    today_counts = per_day.get(today, {})
+
+    # Start-of-day leads = current leads + everything that moved OUT of lead today
+    moved_out_of_lead_today = week_logs.filter(changed_at__gte=start_of_today, from_status='lead').count()
+
+    # ── Per-rep activity (today and 7 days) ─────────────────────
+    rep_rows = (
+        week_logs.exclude(changed_by__isnull=True).filter(to_status__in=tracked)
+        .values_list('changed_by__username')
+        .annotate(
+            today=Count('id', filter=Q(changed_at__gte=start_of_today)),
+            week=Count('id'),
+            prospects_week=Count('id', filter=Q(to_status__in=['prospect', 'prospect_1_week', 'customer'])),
+        )
+        .order_by('-today', '-week')
+    )
+    rep_stats = [
+        {'username': u, 'today': t, 'week': w, 'prospects_week': p} for u, t, w, p in rep_rows
+    ]
+
+    # ── Why leads were lost (one query) ─────────────────────────
+    reason_labels = dict(Contact.LOST_REASON_CHOICES)
+    lost_reasons = [
+        {'label': reason_labels.get(reason, reason), 'count': n}
+        for reason, n in ds_contacts.filter(status='inactive').exclude(lost_reason='')
+        .values_list('lost_reason').annotate(n=Count('id')).order_by('-n')
+    ]
+
+    # ── Queues with time-in-status (one query) ──────────────────
+    queue_contacts = (
+        ds_contacts.filter(status__in=['call_back', 'prospect', 'prospect_1_week'])
+        .annotate(since=status_since_subquery(), next_meeting_at=Min(
+            'meetings__scheduled_at', filter=Q(meetings__completed=False)))
+        .order_by('updated_at')
+    )
+    callback_queue, prospect_queue, prospect_1_week_queue = [], [], []
+    for c in queue_contacts:
+        since = c.since or c.updated_at
+        delta = now - since
+        item = {
+            'contact': c,
+            'since': since,
+            'days': delta.days,
+            'duration': _format_duration(delta),
+            'next_meeting_at': c.next_meeting_at,
+        }
+        if c.status == 'call_back':
+            callback_queue.append(item)
+        elif c.status == 'prospect':
+            prospect_queue.append(item)
+        else:
+            item['days_remaining'] = max(0, Contact.LOCKED_STATUS_DAYS - delta.days)
+            prospect_1_week_queue.append(item)
 
     return render(request, 'crm/driveops_analytics.html', {
         'today': today,
-        'start_of_day_leads': start_of_day_leads,
-        'current_leads': current_leads,
-        'current_callbacks': current_callbacks,
-        'current_prospects': current_prospects,
-        'current_prospect_1_week': current_prospect_1_week,
-        'current_inactive': current_inactive,
-        'current_customers': current_customers,
+        'now': now,
+        'start_of_day_leads': counts.get('lead', 0) + moved_out_of_lead_today,
+        'current_leads': counts.get('lead', 0),
+        'current_callbacks': counts.get('call_back', 0),
+        'current_callback_no_answer': counts.get('call_back_no_answer', 0),
+        'current_prospects': counts.get('prospect', 0),
+        'current_prospect_1_week': counts.get('prospect_1_week', 0),
+        'current_inactive': counts.get('inactive', 0),
+        'current_customers': counts.get('customer', 0),
         'total_active': total_active,
-        'converted_to_callback_today': converted_to_callback_today,
-        'converted_to_callback_no_answer_today': converted_to_callback_no_answer_today,
-        'converted_to_prospect_today': converted_to_prospect_today,
-        'converted_to_prospect_1_week_today': converted_to_prospect_1_week_today,
-        'converted_to_inactive_today': converted_to_inactive_today,
-        'current_callback_no_answer': current_callback_no_answer,
+        'converted_to_callback_today': today_counts.get('call_back', 0),
+        'converted_to_callback_no_answer_today': today_counts.get('call_back_no_answer', 0),
+        'converted_to_prospect_today': today_counts.get('prospect', 0),
+        'converted_to_prospect_1_week_today': today_counts.get('prospect_1_week', 0),
+        'converted_to_inactive_today': today_counts.get('inactive', 0),
         'callback_queue': callback_queue,
         'prospect_queue': prospect_queue,
         'prospect_1_week_queue': prospect_1_week_queue,
         'seven_days': seven_days,
+        'rep_stats': rep_stats,
+        'lost_reasons': lost_reasons,
+        'lost_reasons_max': max((r['count'] for r in lost_reasons), default=0),
     })
 
 
+def _format_duration(delta):
+    hours = delta.seconds // 3600
+    minutes = (delta.seconds % 3600) // 60
+    if delta.days > 0:
+        return f'{delta.days}d {hours}h'
+    if hours > 0:
+        return f'{hours}h {minutes}m'
+    return f'{minutes}m'
+
+
+@require_POST
 def driveops_deactivate(request, pk):
     """AJAX: mark a DriveOps contact as inactive."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
     contact = get_object_or_404(Contact, pk=pk)
-    contact.status = 'inactive'
-    contact.save()
+    data, error = _json_body(request)
+    if error:
+        return error
+    error = change_status(contact, 'inactive', request.user, data.get('lost_reason', ''))
+    if error:
+        return JsonResponse({'error': error}, status=400)
     return JsonResponse({'ok': True, 'contact_id': pk})
 
 
+@require_POST
 def driveops_update_status(request, pk):
-    """AJAX: change a DriveOps contact's status.
-    Prospect — 1 Week contacts may only be moved to Customer.
-    """
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    """AJAX: change a DriveOps contact's status, optionally logging a call note."""
     contact = get_object_or_404(Contact, pk=pk)
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    data, error = _json_body(request)
+    if error:
+        return error
 
     new_status = data.get('status', '')
+    error = change_status(contact, new_status, request.user, data.get('lost_reason', ''))
+    if error:
+        return JsonResponse({'error': error}, status=400)
 
-    if contact.status == 'prospect_1_week' and new_status != 'customer':
-        return JsonResponse(
-            {'error': 'Prospect — 1 Week contacts can only be moved to Customer.'},
-            status=400,
-        )
+    note = (data.get('note') or '').strip()
+    if note:
+        Note.objects.create(contact=contact, body=note, created_by=request.user)
 
-    allowed = {s[0] for s in Contact.STATUS_CHOICES}
-    if new_status not in allowed:
-        return JsonResponse({'error': 'Invalid status.'}, status=400)
-
-    contact.status = new_status
-    contact.save()
     return JsonResponse({
         'ok': True,
         'status': new_status,
         'status_display': contact.get_status_display(),
     })
 
+
+# ── Leads generator ─────────────────────────────────────────────────────────
 
 def leads_generator(request):
     """
@@ -821,40 +974,37 @@ def leads_generator(request):
     if request.method == 'POST':
         action = request.POST.get('action', 'search')
         if action == 'import':
-            to_import = request.session.get(session_key) or []
             region = last_country  # 'us' or 'sa'
-            created = 0
-            for r in to_import:
+            # Any existing contact (active or inactive, any region) with the same phone blocks import.
+            known_phones = set(
+                Contact.objects.exclude(phone_normalized='').values_list('phone_normalized', flat=True)
+            )
+            to_create = []
+            for r in request.session.get(session_key) or []:
                 name = (r.get('name') or '').strip()
                 if not name:
                     continue
                 phone = (r.get('phone') or '').strip()
-                company = (r.get('company') or '').strip()
-                if not company:
-                    company = name
-                # Skip if already exists as inactive (any region)
-                if phone and Contact.objects.filter(phone=phone, status='inactive').exists():
+                phone_key = normalize_phone(phone)
+                if phone_key and phone_key in known_phones:
                     continue
-                # Skip if any active lead already has this phone number
-                if phone and Contact.objects.filter(phone=phone).exclude(status='inactive').exists():
-                    continue
-                # Skip if an active duplicate already exists (same name/company/region)
-                exists = Contact.objects.filter(
+                known_phones.add(phone_key)
+                to_create.append(Contact(
                     name=name,
                     phone=phone,
-                    company=company,
+                    phone_normalized=phone_key,
+                    company=(r.get('company') or '').strip() or name,
                     region=region,
-                ).exists()
-                if not exists:
-                    Contact.objects.create(
-                        name=name,
-                        phone=phone,
-                        company=company,
-                        region=region,
-                        status='lead',
-                    )
-                    created += 1
-            imported_count = created
+                    status='lead',
+                    owner=request.user,
+                ))
+            # bulk_create skips save()/signals, so write the initial status logs explicitly.
+            created = Contact.objects.bulk_create(to_create)
+            ContactStatusLog.objects.bulk_create([
+                ContactStatusLog(contact=c, from_status='', to_status='lead', changed_by=request.user)
+                for c in created
+            ])
+            imported_count = len(to_create)
             request.session[session_key] = []
             results = []
             form = LeadsGeneratorForm()
@@ -872,9 +1022,9 @@ def leads_generator(request):
                         country=country,
                         website_filter=cd.get('website_filter') or 'no_website',
                     )
-                    # Defensive normalization for the template/session
                     inactive_phones = set(
-                        Contact.objects.filter(status='inactive').exclude(phone='').values_list('phone', flat=True)
+                        Contact.objects.filter(status='inactive').exclude(phone_normalized='')
+                        .values_list('phone_normalized', flat=True)
                     )
                     results = []
                     for r in fetched[: (cd.get('max_results') or 25)]:
@@ -886,7 +1036,7 @@ def leads_generator(request):
                             'website': (r.get('website') or '').strip(),
                             'address': (r.get('address') or '').strip(),
                             'source_id': (r.get('source_id') or '').strip(),
-                            'is_inactive': phone in inactive_phones,
+                            'is_inactive': normalize_phone(phone) in inactive_phones,
                         })
                     request.session[session_key] = results
                     request.session[session_country_key] = country
@@ -910,132 +1060,109 @@ def leads_generator(request):
     })
 
 
+# ── Mass email ──────────────────────────────────────────────────────────────
+
+ALLOWED_FROM = (
+    'simon@altitudeinteractiveweb.com',
+    'tristan@altitudeinteractiveweb.com',
+)
+
+
 def mass_email(request):
-    contacts_with_email = Contact.objects.exclude(email='').exclude(email__isnull=True).order_by('name')
-    saved_recipients = SavedRecipient.objects.all()
-
-    success_count = 0
-    failed_recipients = []
     error = None
-    sent = False
-    skipped_count = 0
-    remaining_count = 0
-
-    ALLOWED_FROM = {
-        'simon@altitudeinteractiveweb.com',
-        'tristan@altitudeinteractiveweb.com',
-    }
 
     if request.method == 'POST':
         subject = request.POST.get('subject', '').strip()
         message = request.POST.get('message', '').strip()
-        contact_ids = request.POST.getlist('contact_ids')
+        contact_ids = [i for i in request.POST.getlist('contact_ids') if i.isdigit()]
         saved_emails = request.POST.getlist('saved_recipient_emails')
-        extra_emails_raw = request.POST.get('extra_emails', '').strip()
+        extra_emails = [
+            addr.strip() for addr in request.POST.get('extra_emails', '').replace(',', '\n').splitlines()
+            if '@' in addr
+        ]
         from_email = request.POST.get('from_email', '').strip()
         if from_email not in ALLOWED_FROM:
-            from_email = 'simon@altitudeinteractiveweb.com'
+            from_email = ALLOWED_FROM[0]
 
-        # Build recipient list and contact lookup for personalisation
-        recipients = []
-        email_to_contact = {}
-        if contact_ids:
-            selected = Contact.objects.filter(pk__in=contact_ids).exclude(email='').exclude(email__isnull=True)
-            for c in selected:
-                recipients.append(c.email)
-                email_to_contact[c.email.lower()] = c
-        recipients += [e.strip() for e in saved_emails if e.strip()]
-        if extra_emails_raw:
-            for addr in extra_emails_raw.replace(',', '\n').splitlines():
-                addr = addr.strip()
-                if addr and '@' in addr:
-                    recipients.append(addr)
-
-        # Deduplicate while preserving order
+        # (email, contact) pairs, de-duplicated case-insensitively, preserving order
+        candidates = [(c.email, c) for c in Contact.objects.filter(pk__in=contact_ids).exclude(email='')]
+        candidates += [(e.strip(), None) for e in saved_emails + extra_emails if e.strip()]
         seen = set()
-        unique_recipients = []
-        for r in recipients:
-            if r.lower() not in seen:
-                seen.add(r.lower())
-                unique_recipients.append(r)
+        recipients = []
+        for email, contact in candidates:
+            if email.lower() not in seen:
+                seen.add(email.lower())
+                recipients.append((email, contact))
 
         if not subject:
             error = 'Subject is required.'
         elif not message:
             error = 'Message body is required.'
-        elif not unique_recipients:
+        elif not recipients:
             error = 'Add at least one recipient.'
         else:
-            # Filter unsubscribed
-            unsubscribed_emails = set(Unsubscribe.objects.values_list('email', flat=True))
-            filtered = [r for r in unique_recipients if r.lower() not in unsubscribed_emails]
-            skipped_count = len(unique_recipients) - len(filtered)
-            unique_recipients = filtered
+            unsubscribed = set(Unsubscribe.objects.values_list('email', flat=True))
+            allowed = [(e, c) for e, c in recipients if e.lower() not in unsubscribed]
+            cap = settings.CRM_EMAIL_MAX_RECIPIENTS
 
-            # Hard cap at 40
-            if len(unique_recipients) > 40:
-                remaining_count = len(unique_recipients) - 40
-                unique_recipients = unique_recipients[:40]
+            campaign = EmailCampaign.objects.create(
+                subject=subject,
+                body=message,
+                from_email=from_email,
+                skipped_unsubscribed=len(recipients) - len(allowed),
+                over_cap=max(0, len(allowed) - cap),
+                created_by=request.user,
+            )
+            EmailSend.objects.bulk_create([
+                EmailSend(campaign=campaign, email=e, contact=c) for e, c in allowed[:cap]
+            ])
+            for addr in extra_emails:
+                SavedRecipient.objects.get_or_create(email=addr.lower())
 
-            for i, recipient in enumerate(unique_recipients):
-                contact = email_to_contact.get(recipient.lower())
-                if contact:
-                    name = contact.name or 'there'
-                    company = contact.company or 'your business'
-                else:
-                    name = 'there'
-                    company = 'your business'
+            start_campaign(campaign, request.build_absolute_uri('/'))
+            messages.success(
+                request,
+                f'Queued {min(len(allowed), cap)} email(s). They send in the background '
+                f'(4–8s apart) — progress is shown below.',
+            )
+            return redirect('mass_email')
 
-                personalised = message.replace('{name}', name).replace('{company}', company)
-                footer = (
-                    f"\n\n---\n"
-                    f"Altitude Interactive (Pty) Ltd, 8 Jamaican Music Avenue, "
-                    f"Pretoria, 0081, South Africa\n"
-                    f"Don't want these emails? Unsubscribe here: "
-                    f"https://yoursite.com/unsubscribe/{quote(recipient)}/"
-                )
-                full_message = personalised + footer
+    elif request.GET.get('resume', '').isdigit():
+        campaign = get_object_or_404(EmailCampaign, pk=request.GET['resume'])
+        if campaign.sends.filter(status='pending').exists():
+            start_campaign(campaign, request.build_absolute_uri('/'))
+            messages.success(request, f'Resumed sending "{campaign.subject}".')
+        return redirect('mass_email')
 
-                try:
-                    send_mail(subject, full_message, from_email, [recipient], fail_silently=False)
-                    success_count += 1
-                except Exception:
-                    failed_recipients.append(recipient)
-
-                if i < len(unique_recipients) - 1:
-                    time.sleep(random.uniform(4, 8))
-
-            sent = True
-
-            # Save any new external emails (from extra_emails field) for future use
-            if extra_emails_raw:
-                for addr in extra_emails_raw.replace(',', '\n').splitlines():
-                    addr = addr.strip().lower()
-                    if addr and '@' in addr:
-                        SavedRecipient.objects.get_or_create(email=addr)
-            saved_recipients = SavedRecipient.objects.all()
-
+    default_from = request.user.email if request.user.email in ALLOWED_FROM else ALLOWED_FROM[0]
+    campaigns = EmailCampaign.objects.annotate(
+        sent=Count('sends', filter=Q(sends__status='sent')),
+        failed=Count('sends', filter=Q(sends__status='failed')),
+        pending=Count('sends', filter=Q(sends__status='pending')),
+    )[:10]
+    stale_before = timezone.now() - timedelta(minutes=10)
     return render(request, 'crm/mass_email.html', {
-        'contacts_with_email': contacts_with_email,
-        'saved_recipients': saved_recipients,
-        'success_count': success_count,
-        'failed_recipients': failed_recipients,
+        'contacts_with_email': Contact.objects.exclude(email='').order_by('name'),
+        'saved_recipients': SavedRecipient.objects.all(),
         'error': error,
-        'sent': sent,
-        'skipped_count': skipped_count,
-        'remaining_count': remaining_count,
+        'default_from': request.POST.get('from_email') or default_from,
+        'campaigns': campaigns,
+        'stale_before': stale_before,
+        'any_sending': any(c.pending for c in campaigns),
     })
 
 
+@login_not_required
 def unsubscribe(request, email):
-    decoded = unquote(email)
-    Unsubscribe.objects.get_or_create(email=decoded.lower())
-    return render(request, 'crm/unsubscribed.html', {'email': decoded})
-
-
-def saved_recipient_delete(request, pk):
-    recipient = get_object_or_404(SavedRecipient, pk=pk)
+    decoded = unquote(email).strip()
+    # Only unsubscribe on POST: mail scanners pre-fetch links with GET.
     if request.method == 'POST':
-        recipient.delete()
-        return JsonResponse({'ok': True})
-    return JsonResponse({'ok': False}, status=405)
+        Unsubscribe.objects.get_or_create(email=decoded.lower())
+        return render(request, 'crm/unsubscribed.html', {'email': decoded, 'done': True})
+    return render(request, 'crm/unsubscribed.html', {'email': decoded, 'done': False})
+
+
+@require_POST
+def saved_recipient_delete(request, pk):
+    get_object_or_404(SavedRecipient, pk=pk).delete()
+    return JsonResponse({'ok': True})

@@ -9,7 +9,7 @@
     <form method="post" class="space-y-5">
       {% csrf_token %}
       {% for field in form %}
-      <div {% if field.html_name == 'estimated_value' %}id="estimated-value-row" style="display:none"{% endif %}>
+      <div {% if field.html_name == 'estimated_value' %}id="estimated-value-row" style="display:none"{% elif field.html_name == 'lost_reason' %}id="lost-reason-row" style="display:none"{% endif %}>
         <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
         {{ field }}
         {% if field.errors %}
@@ -33,10 +33,12 @@
   (function () {
     var statusEl = document.getElementById('id_status');
     var evRow = document.getElementById('estimated-value-row');
+    var lostRow = document.getElementById('lost-reason-row');
     if (!statusEl || !evRow) return;
 
     function toggle() {
       evRow.style.display = statusEl.value === 'prospect' ? '' : 'none';
+      if (lostRow) lostRow.style.display = statusEl.value === 'inactive' ? '' : 'none';
     }
 
     statusEl.addEventListener('change', toggle);

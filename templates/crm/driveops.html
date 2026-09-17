@@ -4,28 +4,32 @@
 {% block page_title %}DriveOps{% endblock %}
 
 {% block header_actions %}
+  {% if duplicate_phone_ids %}
+  <form method="post" class="inline" onsubmit="return confirm('Merge leads that share a phone number? Notes, meetings and history move onto the lead that is kept (an inactive lead with that number, otherwise the oldest).');">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="merge_duplicates">
+    <button type="submit" class="btn-secondary text-amber-700 border-amber-300 hover:border-amber-500">Merge duplicates ({{ duplicate_phone_ids|length }})</button>
+  </form>
+  {% endif %}
+  <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}export=csv" class="btn-secondary">Export CSV</a>
   <a href="{% url 'driveops_analytics' %}" class="btn-secondary">Analytics</a>
 {% endblock %}
 
 {% block content %}
-<!-- Who are you? Modal -->
-<div id="user-select-modal" class="fixed inset-0 z-50 hidden">
-  <div class="absolute inset-0 bg-black/60"></div>
-  <div class="absolute inset-0 flex items-center justify-center p-4">
-    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-xs p-8 text-center">
-      <p class="text-xs font-semibold uppercase tracking-widest text-indigo-400 mb-2">DriveOps</p>
-      <h2 class="text-xl font-bold text-gray-900 mb-1">Who are you?</h2>
-      <p class="text-sm text-gray-500 mb-7">Your unworked leads will be filtered to your half.</p>
-      <div class="flex gap-3">
-        <button onclick="selectUser('simon')" class="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 text-sm transition">Simon</button>
-        <button onclick="selectUser('tristan')" class="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 text-sm transition">Tristan</button>
-      </div>
-    </div>
-  </div>
+<!-- Scope tabs -->
+<div class="flex flex-wrap items-center gap-2 mb-3">
+  {% for value, label in scopes %}
+  <a href="?scope={{ value }}&amp;status={{ status }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}"
+     class="rounded-full px-3 py-1 text-sm font-medium {% if scope == value %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+    {{ label }}{% if value == 'unassigned' and unassigned_count %} ({{ unassigned_count }}){% endif %}
+  </a>
+  {% endfor %}
 </div>
-<!-- Filters + user indicator -->
+
+<!-- Filters -->
 <div class="bg-white rounded-xl border border-gray-200 p-4 mb-5">
   <form method="get" class="flex flex-wrap gap-3 w-full">
+    <input type="hidden" name="scope" value="{{ scope }}">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, company, phone..."
       class="form-input flex-1 min-w-48">
     <select name="status" class="form-input w-48" onchange="this.form.submit()">
@@ -35,44 +39,73 @@
       {% endfor %}
     </select>
     <button type="submit" class="btn-primary">Search</button>
-    {% if q or status != 'lead' %}<a href="{% url 'driveops' %}" class="btn-secondary">Clear</a>{% endif %}
+    {% if q or status != 'lead' %}<a href="{% url 'driveops' %}?scope={{ scope }}" class="btn-secondary">Clear</a>{% endif %}
   </form>
-  <div id="user-indicator" class="hidden mt-3 flex items-center gap-2 text-sm text-gray-500">
-    Showing leads for <span id="user-label" class="font-semibold text-indigo-700"></span>
-    <button onclick="switchUser()" class="ml-1 text-xs text-gray-400 underline hover:text-gray-600">Switch</button>
-  </div>
 </div>
+
+<!-- Bulk actions (shown when leads are selected) -->
+<form id="bulk-form" method="post" action="{% url 'driveops_bulk' %}"
+      class="hidden sticky top-0 z-10 mb-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <span class="text-sm font-medium text-indigo-900"><span id="bulk-count">0</span> selected</span>
+  <div class="flex items-center gap-2">
+    <select name="owner" class="form-input w-40 py-1.5">
+      {% for rep in reps %}<option value="{{ rep.pk }}" {% if rep.pk == request.user.pk %}selected{% endif %}>{{ rep.get_username }}</option>{% endfor %}
+      <option value="">— Unassigned —</option>
+    </select>
+    <button type="submit" name="action" value="assign" class="btn-secondary py-1.5">Assign</button>
+  </div>
+  <div class="flex items-center gap-2">
+    <select name="status" id="bulk-status" class="form-input w-48 py-1.5">
+      {% for val, label in status_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+      <option value="inactive">Inactive</option>
+    </select>
+    <select name="lost_reason" id="bulk-lost-reason" class="form-input w-48 py-1.5 hidden">
+      <option value="">Why inactive?</option>
+      {% for val, label in lost_reasons %}{% if val != 'expired' %}<option value="{{ val }}">{{ label }}</option>{% endif %}{% endfor %}
+    </select>
+    <button type="submit" name="action" value="status" class="btn-primary py-1.5">Change status</button>
+  </div>
+  <button type="button" onclick="clearSelection()" class="ml-auto text-xs text-indigo-700 hover:underline">Clear selection</button>
+</form>
 
 <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
   <table class="min-w-full divide-y divide-gray-200">
     <thead class="bg-gray-50">
       <tr>
+        <th class="pl-6 pr-2 py-3 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-300" title="Select all on this page"></th>
         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next step</th>
+        {% if scope != 'mine' %}<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>{% endif %}
         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100" id="driveops-table-body">
       {% for contact in contacts %}
       <tr class="hover:bg-gray-50" id="row-{{ contact.pk }}" data-status="{{ contact.status }}">
+        <td class="pl-6 pr-2 py-4"><input type="checkbox" name="contact_ids" value="{{ contact.pk }}" form="bulk-form" class="row-select rounded border-gray-300"></td>
         <td class="px-6 py-4">
           <a href="{% url 'contact_detail' contact.pk %}" class="text-sm font-medium text-indigo-600 hover:underline">{{ contact.name }}</a>
+          {% if contact.pk in duplicate_phone_ids %}<span class="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title="Another lead has this phone number">Duplicate</span>{% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-gray-600">{{ contact.company|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-gray-600">{{ contact.phone|default:"—" }}</td>
+        <td class="px-6 py-4 text-sm text-gray-600">{% if contact.phone %}<a href="tel:{{ contact.phone }}" class="hover:text-indigo-600 hover:underline">{{ contact.phone }}</a>{% else %}—{% endif %}</td>
         <td class="px-6 py-4">
-          <span id="badge-{{ contact.pk }}" class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-            {% if contact.status == 'customer' %}bg-green-100 text-green-800
-            {% elif contact.status == 'prospect' %}bg-blue-100 text-blue-800
-            {% elif contact.status == 'prospect_1_week' %}bg-violet-100 text-violet-800
-            {% elif contact.status == 'lead' %}bg-yellow-100 text-yellow-800
-            {% elif contact.status == 'call_back' %}bg-indigo-100 text-indigo-800
-            {% else %}bg-gray-100 text-gray-600{% endif %}">
-            {{ contact.get_status_display }}
-          </span>
+          {% include "crm/_status_badge.html" with status=contact.status label=contact.get_status_display badge_pk=contact.pk %}
         </td>
+        <td class="px-6 py-4 text-xs whitespace-nowrap" id="next-{{ contact.pk }}">
+          {% if contact.next_meeting_at %}
+            {% if contact.next_meeting_at < now %}<span class="text-red-600 font-medium">Overdue · {{ contact.next_meeting_at|date:"D j M H:i" }}</span>
+            {% else %}<span class="text-gray-600">{{ contact.next_meeting_at|date:"D j M H:i" }}</span>{% endif %}
+          {% elif contact.status in follow_up_statuses %}
+            <span class="text-amber-600 font-medium">⚠ None scheduled</span>
+          {% else %}<span class="text-gray-300">—</span>{% endif %}
+        </td>
+        {% if scope != 'mine' %}<td class="px-6 py-4 text-sm text-gray-600">{{ contact.owner.get_username|default:"—" }}</td>{% endif %}
         <td class="px-6 py-4">
           <div class="flex items-center gap-2">
             <button
@@ -82,7 +115,7 @@
               Schedule
             </button>
             <button
-              onclick="openEditStatusModal({{ contact.pk }}, '{{ contact.name|escapejs }}', '{{ contact.status }}')"
+              onclick="openEditStatusModal({{ contact.pk }}, '{{ contact.name|escapejs }}', document.getElementById('row-{{ contact.pk }}').dataset.status)"
               class="inline-flex items-center gap-1.5 rounded-md bg-white border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 focus:outline-none">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
               Edit Status
@@ -92,12 +125,16 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">No driving school leads found.</td>
+        <td colspan="8" class="px-6 py-10 text-center text-sm text-gray-400">
+          No driving school leads found.
+          {% if scope == 'mine' and unassigned_count %}<a href="?scope=unassigned" class="text-indigo-600 hover:underline">View {{ unassigned_count }} unassigned</a> — working a lead assigns it to you.{% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% include "crm/_pagination.html" %}
 
 <!-- Schedule Modal -->
 <div id="schedule-modal" class="fixed inset-0 z-50 hidden">
@@ -155,6 +192,17 @@
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">New Status</label>
         <select id="edit-status-select" class="form-input w-full"></select>
+      </div>
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Call notes <span class="font-normal text-gray-400">(optional)</span></label>
+        <textarea id="edit-status-note" rows="3" class="form-input w-full" placeholder="What happened on the call?"></textarea>
+      </div>
+      <div id="edit-status-lost-reason-row" class="hidden mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Why is this lead inactive?</label>
+        <select id="edit-status-lost-reason" class="form-input w-full">
+          <option value="">Choose a reason…</option>
+          {% for val, label in lost_reasons %}{% if val != 'expired' %}<option value="{{ val }}">{{ label }}</option>{% endif %}{% endfor %}
+        </select>
       </div>
 
       <div id="edit-status-error" class="hidden mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"></div>
@@ -239,10 +287,11 @@
         var typeLabel = meetingType === 'video' ? 'Video call' : 'Call';
         okEl.textContent = typeLabel + ' scheduled for ' + data.scheduled_at + '.';
         okEl.classList.remove('hidden');
-        // Update the row's badge to reflect new status from schedule action
-        var newStatus = meetingType === 'video' ? 'prospect' : 'call_back';
-        var newLabel = meetingType === 'video' ? 'Prospect' : 'Call Back';
-        updateRowBadge(pk, newStatus, newLabel);
+        updateRowBadge(pk, data.status, data.status_display);
+        var row = document.getElementById('row-' + pk);
+        if (row) row.dataset.status = data.status;
+        var next = document.getElementById('next-' + pk);
+        if (next) next.innerHTML = '<span class="text-gray-600">' + data.scheduled_at + '</span>';
         setTimeout(function() { closeScheduleModal(); }, 1800);
       } else {
         errEl.textContent = data.error || 'Something went wrong.';
@@ -262,6 +311,9 @@
     _editStatusContactPk = pk;
     document.getElementById('edit-status-name').textContent = name;
     document.getElementById('edit-status-error').classList.add('hidden');
+    document.getElementById('edit-status-note').value = '';
+    document.getElementById('edit-status-lost-reason').value = '';
+    document.getElementById('edit-status-lost-reason-row').classList.add('hidden');
 
     var select = document.getElementById('edit-status-select');
     select.innerHTML = '';
@@ -304,8 +356,21 @@
   }
 
   function submitMarkInactive() {
-    var pk = _editStatusContactPk;
-    sendStatusUpdate(pk, 'inactive');
+    // First click reveals the reason picker; a reason is required (Pipedrive-style lost reason).
+    var row = document.getElementById('edit-status-lost-reason-row');
+    var reason = document.getElementById('edit-status-lost-reason');
+    var errEl = document.getElementById('edit-status-error');
+    if (row.classList.contains('hidden')) {
+      row.classList.remove('hidden');
+      reason.focus();
+      return;
+    }
+    if (!reason.value) {
+      errEl.textContent = 'Choose why this lead is inactive.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    sendStatusUpdate(_editStatusContactPk, 'inactive');
   }
 
   function sendStatusUpdate(pk, newStatus) {
@@ -318,7 +383,11 @@
     fetch('/driveops/status/' + pk + '/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-      body: JSON.stringify({ status: newStatus })
+      body: JSON.stringify({
+        status: newStatus,
+        note: document.getElementById('edit-status-note').value.trim(),
+        lost_reason: newStatus === 'inactive' ? document.getElementById('edit-status-lost-reason').value : ''
+      })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -331,7 +400,7 @@
           if (row) {
             row.style.transition = 'opacity 0.3s';
             row.style.opacity = '0';
-            setTimeout(function() { row.remove(); }, 300);
+            setTimeout(function() { row.remove(); updateBulkBar(); }, 300);
           }
           closeEditStatusModal();
         } else {
@@ -361,6 +430,7 @@
     'prospect_1_week': 'bg-violet-100 text-violet-800',
     'lead':            'bg-yellow-100 text-yellow-800',
     'call_back':       'bg-indigo-100 text-indigo-800',
+    'call_back_no_answer': 'bg-orange-100 text-orange-800',
   };
 
   function updateRowBadge(pk, status, label) {
@@ -371,81 +441,54 @@
     badge.textContent = label;
   }
 
+  // ── Bulk selection ──────────────────────────────────────────
+  function selectedBoxes() {
+    return Array.prototype.filter.call(document.querySelectorAll('.row-select'), function(cb) { return cb.checked; });
+  }
+
+  function updateBulkBar() {
+    var count = selectedBoxes().length;
+    document.getElementById('bulk-count').textContent = count;
+    document.getElementById('bulk-form').classList.toggle('hidden', count === 0);
+    var all = document.querySelectorAll('.row-select');
+    var selectAll = document.getElementById('select-all');
+    selectAll.checked = all.length > 0 && count === all.length;
+    selectAll.indeterminate = count > 0 && count < all.length;
+  }
+
+  function clearSelection() {
+    document.querySelectorAll('.row-select').forEach(function(cb) { cb.checked = false; });
+    updateBulkBar();
+  }
+
+  document.getElementById('select-all').addEventListener('change', function() {
+    var checked = this.checked;
+    document.querySelectorAll('.row-select').forEach(function(cb) { cb.checked = checked; });
+    updateBulkBar();
+  });
+  document.getElementById('driveops-table-body').addEventListener('change', function(e) {
+    if (e.target.classList.contains('row-select')) updateBulkBar();
+  });
+
+  var bulkStatus = document.getElementById('bulk-status');
+  var bulkReason = document.getElementById('bulk-lost-reason');
+  bulkStatus.addEventListener('change', function() {
+    bulkReason.classList.toggle('hidden', bulkStatus.value !== 'inactive');
+  });
+  document.getElementById('bulk-form').addEventListener('submit', function(e) {
+    var action = e.submitter && e.submitter.value;
+    if (action === 'status' && bulkStatus.value === 'inactive' && !bulkReason.value) {
+      e.preventDefault();
+      alert('Choose why these leads are inactive.');
+      bulkReason.focus();
+    }
+  });
+
   // ── CSRF helper ─────────────────────────────────────────────
   function getCsrfToken() {
     var cookie = document.cookie.split(';').find(function(c) { return c.trim().startsWith('csrftoken='); });
     return cookie ? cookie.trim().split('=')[1] : '';
   }
 
-  // ── User split: Simon vs Tristan ────────────────────────────
-  // Unworked leads (status='lead') are split by pk parity:
-  //   Simon  → even pk
-  //   Tristan → odd pk
-  // All other statuses are always visible to both users.
-
-  var LEAD_STATUS = 'lead';
-
-  function applyUserFilter(user) {
-    var rows = document.querySelectorAll('#driveops-table-body tr[id^="row-"]');
-    rows.forEach(function(row) {
-      var status = row.dataset.status;
-      if (status !== LEAD_STATUS) { row.style.display = ''; return; }
-      var pk = parseInt(row.id.replace('row-', ''), 10);
-      var isSimon   = (pk % 2 === 0);
-      var show = (user === 'simon') ? isSimon : !isSimon;
-      row.style.display = show ? '' : 'none';
-    });
-
-    // If every visible row is hidden, show a "no leads" message
-    var anyVisible = Array.from(rows).some(function(r) { return r.style.display !== 'none'; });
-    var empty = document.querySelector('#driveops-table-body .no-leads-msg');
-    if (!anyVisible && !document.querySelector('#driveops-table-body tr:not([id^="row-"])')) {
-      if (!empty) {
-        var tr = document.createElement('tr');
-        tr.className = 'no-leads-msg';
-        tr.innerHTML = '<td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">No unworked leads in your queue right now.</td>';
-        document.getElementById('driveops-table-body').appendChild(tr);
-      }
-    } else if (empty) {
-      empty.remove();
-    }
-  }
-
-  function showUserIndicator(user) {
-    var el = document.getElementById('user-indicator');
-    var label = document.getElementById('user-label');
-    if (el && label) {
-      label.textContent = user.charAt(0).toUpperCase() + user.slice(1);
-      el.classList.remove('hidden');
-      el.style.display = 'flex';
-    }
-  }
-
-  function selectUser(user) {
-    localStorage.setItem('driveops_user', user);
-    document.getElementById('user-select-modal').classList.add('hidden');
-    applyUserFilter(user);
-    showUserIndicator(user);
-  }
-
-  function switchUser() {
-    localStorage.removeItem('driveops_user');
-    document.getElementById('user-select-modal').classList.remove('hidden');
-    // Reset all rows to visible while modal is open
-    document.querySelectorAll('#driveops-table-body tr').forEach(function(r) { r.style.display = ''; });
-    var el = document.getElementById('user-indicator');
-    if (el) el.style.display = 'none';
-  }
-
-  // On page load: show modal or apply saved preference
-  (function() {
-    var saved = localStorage.getItem('driveops_user');
-    if (saved === 'simon' || saved === 'tristan') {
-      applyUserFilter(saved);
-      showUserIndicator(saved);
-    } else {
-      document.getElementById('user-select-modal').classList.remove('hidden');
-    }
-  })();
 </script>
 {% endblock %}
