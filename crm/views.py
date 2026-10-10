@@ -22,7 +22,7 @@ from django.views.decorators.http import require_POST
 
 from .models import (
     Contact, ContactStatusLog, Deal, EmailCampaign, EmailSend, Meeting, Note, Plan, SavedRecipient, Subscription,
-    TodoBlock, Unsubscribe,
+    Unsubscribe,
 )
 from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm, PlanForm, SubscriptionForm
 from .services import (
@@ -519,15 +519,6 @@ def calendar_view(request):
     for m in meetings:
         day_meetings[timezone.localtime(m.scheduled_at).date()].append(m)
 
-    day_todos = {d: [] for d in days}
-    for tb in TodoBlock.objects.filter(date__gte=today, date__lte=days[-1]):
-        day_todos[tb.date].append(tb)
-
-    # Meeting times per day as JSON for conflict checking in JS
-    meeting_times_by_day = {
-        d.isoformat(): [timezone.localtime(m.scheduled_at).strftime('%H:%M') for m in day_meetings[d]] for d in days
-    }
-
     # Past meetings (last 7 days) that were never completed, for rescheduling
     past_meetings = Meeting.objects.filter(
         scheduled_at__date__gte=today - timedelta(days=7),
@@ -536,9 +527,8 @@ def calendar_view(request):
     ).select_related('contact').order_by('scheduled_at')
 
     return render(request, 'crm/calendar.html', {
-        'day_data': [(d, day_meetings[d], day_todos[d]) for d in days],
+        'day_data': [(d, day_meetings[d]) for d in days],
         'today': today,
-        'meeting_times_json': json.dumps(meeting_times_by_day),
         'past_meetings': past_meetings,
     })
 
@@ -613,53 +603,6 @@ def meeting_reschedule(request, pk):
         'edit_url': reverse('meeting_edit', args=[meeting.pk]),
         'delete_url': reverse('meeting_delete', args=[meeting.pk]),
     })
-
-
-@require_POST
-def todo_block_create(request):
-    data, error = _json_body(request)
-    if error:
-        return error
-    title = (data.get('title') or '').strip()
-    color = data.get('color', 'blue')
-    try:
-        block_date = datetime.strptime(data.get('date') or '', '%Y-%m-%d').date()
-        start_t = datetime.strptime(data.get('start_time') or '', '%H:%M').time()
-        end_t = datetime.strptime(data.get('end_time') or '', '%H:%M').time()
-    except ValueError:
-        return JsonResponse({'error': 'Missing or invalid date/time'}, status=400)
-    if not title:
-        return JsonResponse({'error': 'Missing fields'}, status=400)
-    if end_t <= start_t:
-        return JsonResponse({'error': 'End time must be after start time'}, status=400)
-
-    # Cannot start within 30 min after any meeting start on that day
-    block_start = datetime.combine(block_date, start_t)
-    for m in Meeting.objects.filter(scheduled_at__date=block_date, completed=False):
-        meeting_start = timezone.localtime(m.scheduled_at).time().replace(second=0, microsecond=0)
-        m_start_dt = datetime.combine(block_date, meeting_start)
-        if m_start_dt <= block_start < m_start_dt + timedelta(minutes=30):
-            return JsonResponse({
-                'error': f'Blocked: meeting "{m.title}" at {meeting_start.strftime("%H:%M")} (30 min buffer)'
-            }, status=400)
-
-    if color not in dict(TodoBlock.COLOR_CHOICES):
-        color = 'blue'
-
-    block = TodoBlock.objects.create(date=block_date, start_time=start_t, end_time=end_t, title=title, color=color)
-    return JsonResponse({
-        'id': block.pk,
-        'title': block.title,
-        'start_time': block.start_time.strftime('%H:%M'),
-        'end_time': block.end_time.strftime('%H:%M'),
-        'color': block.color,
-    })
-
-
-@require_POST
-def todo_block_delete(request, pk):
-    get_object_or_404(TodoBlock, pk=pk).delete()
-    return JsonResponse({'ok': True})
 
 
 def note_delete(request, pk):
