@@ -12,6 +12,7 @@
   </form>
   {% endif %}
   <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}export=csv" class="btn-secondary">Export CSV</a>
+  <a href="{% url 'driveops_revenue' %}" class="btn-secondary">Revenue</a>
   <a href="{% url 'driveops_analytics' %}" class="btn-secondary">Analytics</a>
 {% endblock %}
 

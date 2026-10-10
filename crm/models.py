@@ -272,3 +272,59 @@ class EmailSend(models.Model):
 
     def __str__(self):
         return f'{self.email} ({self.status})'
+
+
+class Plan(models.Model):
+    """A DriveOps subscription plan (e.g. Starter, Pro). Prices are in Rand."""
+    INTERVAL_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+    name = models.CharField(max_length=100, unique=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    interval = models.CharField(max_length=10, choices=INTERVAL_CHOICES, default='monthly')
+    is_active = models.BooleanField(default=True, help_text='Untick to stop offering this plan to new subscribers.')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['price', 'name']
+
+    def __str__(self):
+        return f'{self.name} (R{self.price:,.0f}/{"mo" if self.interval == "monthly" else "yr"})'
+
+
+class Subscription(models.Model):
+    """A DriveOps customer paying for a plan. Active from start_date until end_date (blank = still active).
+
+    The price is copied from the plan when the subscription is created, so later plan price changes or
+    discounts never rewrite past income.
+    """
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='subscriptions')
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name='subscriptions')
+    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True,
+                                help_text="Leave blank to use the plan's price.")
+    interval = models.CharField(max_length=10, choices=Plan.INTERVAL_CHOICES, editable=False)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True, help_text='Day the subscription was cancelled.')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-start_date', '-pk']
+
+    def __str__(self):
+        return f'{self.contact.name} – {self.plan.name}'
+
+    def save(self, *args, **kwargs):
+        if self.price is None:
+            self.price = self.plan.price
+        if not self.interval:
+            self.interval = self.plan.interval
+        super().save(*args, **kwargs)
+
+    @property
+    def monthly_amount(self):
+        """Monthly recurring revenue from this subscription (yearly plans spread over 12 months)."""
+        return self.price / 12 if self.interval == 'yearly' else self.price
+
+    def is_active_on(self, day):
+        return self.start_date <= day and (self.end_date is None or self.end_date > day)

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}DriveOps Revenue — CRM Tracker{% endblock %}
+{% block page_title %}DriveOps Revenue{% endblock %}
+
+{% block header_actions %}
+  <a href="{% url 'driveops' %}" class="btn-secondary">← Back to DriveOps</a>
+  <a href="{% url 'subscription_create' %}" class="btn-primary">+ Add Subscription</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Headline numbers -->
+<div class="mb-6">
+  <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">As of {{ today|date:"j F Y" }}</p>
+  <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Monthly income (MRR)</p>
+      <p class="text-2xl font-semibold text-gray-900">R{{ mrr|floatformat:"0g" }}</p>
+      {% if mrr_change %}
+      <p class="text-xs mt-1 {% if mrr_change > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+        {% if mrr_change > 0 %}↑ +{% else %}↓ {% endif %}R{{ mrr_change|floatformat:"0g" }} vs last month
+      </p>
+      {% endif %}
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Yearly run rate (ARR)</p>
+      <p class="text-2xl font-semibold text-gray-900">R{{ arr|floatformat:"0g" }}</p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Paying customers</p>
+      <p class="text-2xl font-semibold text-gray-900">{{ active_count }}</p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Avg per customer</p>
+      <p class="text-2xl font-semibold text-gray-900">R{{ arpu|floatformat:"0g" }}</p>
+      <p class="text-xs text-gray-400 mt-1">per month</p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">New this month</p>
+      <p class="text-2xl font-semibold text-green-700">+R{{ this_month.new|floatformat:"0g" }}</p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <p class="text-xs text-gray-500 mb-1">Churned this month</p>
+      <p class="text-2xl font-semibold {% if this_month.churned %}text-red-700{% else %}text-gray-400{% endif %}">−R{{ this_month.churned|floatformat:"0g" }}</p>
+    </div>
+  </div>
+  <p class="text-xs text-gray-400 mt-2">Yearly plans count as 1/12 of their price each month.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <!-- Month by month -->
+  <div class="lg:col-span-2">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Monthly income — last 12 months</p>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Month</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-full">MRR</th>
+            <th class="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Customers</th>
+            <th class="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">New</th>
+            <th class="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Churned</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for m in months %}
+          <tr>
+            <td class="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">{{ m.start|date:"M Y" }}{% if forloop.first %} <span class="text-xs text-gray-400">(so far)</span>{% endif %}</td>
+            <td class="px-4 py-2">
+              <div class="grid grid-cols-[1fr_6rem] items-center gap-3 min-w-[14rem]">
+                <span class="h-2.5 rounded-sm bg-gray-100 overflow-hidden">
+                  <span class="block h-full rounded-sm bg-indigo-600" style="width: {% widthratio m.mrr months_max 100 %}%"></span>
+                </span>
+                <span class="text-right text-sm font-semibold text-gray-900 tabular-nums">R{{ m.mrr|floatformat:"0g" }}</span>
+              </div>
+            </td>
+            <td class="px-4 py-2 text-right text-sm text-gray-700 tabular-nums">{{ m.subscribers }}</td>
+            <td class="px-4 py-2 text-right text-sm tabular-nums {% if m.new %}text-green-700{% else %}text-gray-300{% endif %}">{% if m.new %}+R{{ m.new|floatformat:"0g" }}{% else %}—{% endif %}</td>
+            <td class="px-4 py-2 text-right text-sm tabular-nums {% if m.churned %}text-red-700{% else %}text-gray-300{% endif %}">{% if m.churned %}−R{{ m.churned|floatformat:"0g" }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Plans -->
+  <div>
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Income by plan</p>
+    <div class="bg-white rounded-xl border border-gray-200 mb-6">
+      {% if plan_rows %}
+      <ul class="divide-y divide-gray-100">
+        {% for row in plan_rows %}
+        <li class="px-4 py-3 flex items-center justify-between text-sm">
+          <span><span class="font-medium text-gray-900">{{ row.plan.name }}</span>
+            <span class="text-gray-500">· {{ row.subscribers }} customer{{ row.subscribers|pluralize }}</span></span>
+          <span class="font-semibold text-gray-900 tabular-nums">R{{ row.mrr|floatformat:"0g" }} <span class="text-xs font-normal text-gray-400">({% widthratio row.mrr mrr 100 %}%)</span></span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="px-4 py-6 text-center text-sm text-gray-400">No active subscriptions yet.</p>
+      {% endif %}
+    </div>
+
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Plans</p>
+    <div class="bg-white rounded-xl border border-gray-200">
+      <ul class="divide-y divide-gray-100">
+        {% for plan in plans %}
+        <li class="px-4 py-2.5 flex items-center justify-between text-sm">
+          <span class="{% if not plan.is_active %}text-gray-400{% else %}text-gray-900{% endif %}">{{ plan.name }}{% if not plan.is_active %} <span class="text-xs">(retired)</span>{% endif %}</span>
+          <span class="text-gray-600 tabular-nums">R{{ plan.price|floatformat:"0g" }}/{% if plan.interval == 'yearly' %}yr{% else %}mo{% endif %} <span class="text-xs text-gray-400">· {{ plan.n }} sub{{ plan.n|pluralize }}</span></span>
+        </li>
+        {% empty %}
+        <li class="px-4 py-3 text-sm text-gray-400">No plans yet — add your first one below.</li>
+        {% endfor %}
+      </ul>
+      <form method="post" class="border-t border-gray-200 p-4 space-y-3">
+        {% csrf_token %}
+        <p class="text-sm font-medium text-gray-700">Add a plan</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">{{ plan_form.name }}{% if plan_form.name.errors %}<p class="mt-1 text-xs text-red-600">{{ plan_form.name.errors|join:", " }}</p>{% endif %}</div>
+          <div>{{ plan_form.price }}{% if plan_form.price.errors %}<p class="mt-1 text-xs text-red-600">{{ plan_form.price.errors|join:", " }}</p>{% endif %}</div>
+          <div>{{ plan_form.interval }}</div>
+        </div>
+        <input type="hidden" name="plan-is_active" value="on">
+        <button type="submit" class="btn-secondary w-full">Add Plan</button>
+        <p class="text-xs text-gray-400">Rename, reprice or retire plans in the <a href="{% url 'admin:crm_plan_changelist' %}" class="underline hover:text-indigo-600">admin</a>. Repricing a plan doesn't change what existing customers pay.</p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Subscriptions -->
+<p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Active subscriptions ({{ active_subs|length }})</p>
+<div class="bg-white rounded-xl border border-gray-200 overflow-x-auto mb-6">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Plan</th>
+        <th class="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+        <th class="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Per month</th>
+        <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Since</th>
+        <th class="px-4 py-2"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for s in active_subs %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-2.5 text-sm"><a href="{% url 'contact_detail' s.contact.pk %}" class="font-medium text-indigo-600 hover:underline">{{ s.contact.name }}</a></td>
+        <td class="px-4 py-2.5 text-sm text-gray-700">{{ s.plan.name }}</td>
+        <td class="px-4 py-2.5 text-right text-sm text-gray-700 tabular-nums">R{{ s.price|floatformat:"0g" }}/{% if s.interval == 'yearly' %}yr{% else %}mo{% endif %}</td>
+        <td class="px-4 py-2.5 text-right text-sm font-semibold text-gray-900 tabular-nums">R{{ s.monthly_amount|floatformat:"0g" }}</td>
+        <td class="px-4 py-2.5 text-sm text-gray-600 whitespace-nowrap">{{ s.start_date|date:"j M Y" }}{% if s.end_date %} <span class="text-xs text-amber-700">· ends {{ s.end_date|date:"j M" }}</span>{% endif %}</td>
+        <td class="px-4 py-2.5 text-right text-sm whitespace-nowrap">
+          <a href="{% url 'subscription_edit' s.pk %}" class="text-gray-400 hover:text-indigo-600 mr-3">Edit</a>
+          {% if not s.end_date %}
+          <form method="post" action="{% url 'subscription_cancel' s.pk %}" class="inline"
+            onsubmit="return confirm('Cancel {{ s.contact.name|escapejs }}\'s subscription as of today?');">
+            {% csrf_token %}
+            <button type="submit" class="text-gray-400 hover:text-red-600">Cancel</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="px-4 py-10 text-center text-sm text-gray-400">No paying customers yet. Use “+ Add Subscription” when a driving school signs up.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if ended_subs %}
+<p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Cancelled &amp; upcoming ({{ ended_subs|length }})</p>
+<div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+  <table class="min-w-full divide-y divide-gray-200">
+    <tbody class="divide-y divide-gray-100">
+      {% for s in ended_subs %}
+      <tr class="text-gray-500">
+        <td class="px-4 py-2.5 text-sm"><a href="{% url 'contact_detail' s.contact.pk %}" class="hover:text-indigo-600">{{ s.contact.name }}</a></td>
+        <td class="px-4 py-2.5 text-sm">{{ s.plan.name }}</td>
+        <td class="px-4 py-2.5 text-right text-sm tabular-nums">R{{ s.monthly_amount|floatformat:"0g" }}/mo</td>
+        <td class="px-4 py-2.5 text-sm whitespace-nowrap">
+          {% if s.start_date > today %}Starts {{ s.start_date|date:"j M Y" }}{% else %}{{ s.start_date|date:"j M Y" }} → {{ s.end_date|date:"j M Y" }}{% endif %}
+        </td>
+        <td class="px-4 py-2.5 text-right text-sm"><a href="{% url 'subscription_edit' s.pk %}" class="text-gray-400 hover:text-indigo-600">Edit</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

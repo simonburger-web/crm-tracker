@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Contact, ContactStatusLog, EmailCampaign, Meeting, Note, Unsubscribe
+from .models import Contact, ContactStatusLog, EmailCampaign, Meeting, Note, Plan, Subscription, Unsubscribe
 from .services import expire_one_week_prospects
 from .utils import normalize_phone
 
@@ -308,3 +308,63 @@ class MassEmailTests(CRMTestCase):
         self.assertEqual(campaign.status, 'done')
         self.assertEqual(campaign.skipped_unsubscribed, 1)
         self.assertTrue(contact.email_sends.filter(status='sent').exists())
+
+
+class RevenueTests(CRMTestCase):
+    def setUp(self):
+        super().setUp()
+        self.today = timezone.localdate()
+        self.starter = Plan.objects.create(name='Starter', price=500)
+        self.annual = Plan.objects.create(name='Annual', price=12000, interval='yearly')
+
+    def test_add_plan_from_revenue_page(self):
+        self.client.post(reverse('driveops_revenue'), {'plan-name': 'Pro', 'plan-price': '900',
+                                                       'plan-interval': 'monthly', 'plan-is_active': 'on'})
+        self.assertTrue(Plan.objects.filter(name='Pro', price=900).exists())
+
+    def test_create_subscription_copies_plan_price_and_marks_customer(self):
+        contact = self.driving_school(status='prospect')
+        response = self.client.post(reverse('subscription_create'), {
+            'contact': contact.pk, 'plan': self.starter.pk, 'price': '', 'start_date': self.today.isoformat(),
+        })
+        self.assertRedirects(response, reverse('driveops_revenue'), fetch_redirect_response=False)
+        sub = Subscription.objects.get()
+        self.assertEqual((sub.price, sub.interval), (500, 'monthly'))
+        contact.refresh_from_db()
+        self.assertEqual(contact.status, 'customer')
+        # Repricing the plan leaves the existing customer's price alone.
+        self.starter.price = 700
+        self.starter.save()
+        sub.refresh_from_db()
+        self.assertEqual(sub.price, 500)
+
+    def test_mrr_months_and_churn(self):
+        a = self.driving_school(name='A', phone='011 000 0001')
+        b = self.driving_school(name='B', phone='011 000 0002')
+        c = self.driving_school(name='C', phone='011 000 0003')
+        long_ago = self.today - timedelta(days=400)
+        Subscription.objects.create(contact=a, plan=self.starter, start_date=long_ago)
+        Subscription.objects.create(contact=b, plan=self.annual, start_date=long_ago)  # R1000/mo
+        cancelled = Subscription.objects.create(contact=c, plan=self.starter, price=300, start_date=long_ago)
+        self.client.post(reverse('subscription_cancel', args=[cancelled.pk]))
+        ctx = self.client.get(reverse('driveops_revenue')).context
+        self.assertEqual(ctx['mrr'], 1500)
+        self.assertEqual(ctx['arr'], 18000)
+        self.assertEqual(ctx['active_count'], 2)
+        self.assertEqual(ctx['this_month']['churned'], 300)
+        self.assertEqual(ctx['months'][1]['mrr'], 1800)  # last month, before the cancellation
+        self.assertEqual(len(ctx['months']), 12)
+
+    def test_end_date_must_follow_start(self):
+        contact = self.driving_school()
+        response = self.client.post(reverse('subscription_create'), {
+            'contact': contact.pk, 'plan': self.starter.pk, 'start_date': '2026-05-01', 'end_date': '2026-04-01',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Subscription.objects.exists())
+
+    def test_pages_render(self):
+        sub = Subscription.objects.create(contact=self.driving_school(), plan=self.starter, start_date=self.today)
+        for url in (reverse('driveops_revenue'), reverse('subscription_create'),
+                    reverse('subscription_edit', args=[sub.pk])):
+            self.assertEqual(self.client.get(url).status_code, 200, url)

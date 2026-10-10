@@ -1,5 +1,5 @@
 from django import forms
-from .models import Contact, Deal, Note, Meeting
+from .models import Contact, Deal, Note, Meeting, Plan, Subscription
 from .utils import normalize_phone
 
 
@@ -148,3 +148,49 @@ class LeadsGeneratorForm(forms.Form):
         widget=forms.Select(attrs={'class': 'form-input'}),
         label='Website',
     )
+
+
+class PlanForm(forms.ModelForm):
+    class Meta:
+        model = Plan
+        fields = ['name', 'price', 'interval', 'is_active']
+        labels = {'price': 'Price (R)', 'interval': 'Billed', 'is_active': 'Offered to new subscribers'}
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. Starter'}),
+            'price': forms.NumberInput(attrs={'class': 'form-input', 'placeholder': '0.00', 'min': '0', 'step': '0.01'}),
+            'interval': forms.Select(attrs={'class': 'form-input'}),
+        }
+
+
+class SubscriptionForm(forms.ModelForm):
+    class Meta:
+        model = Subscription
+        fields = ['contact', 'plan', 'price', 'start_date', 'end_date']
+        labels = {'contact': 'DriveOps customer', 'price': 'Price (R)', 'end_date': 'Cancelled on'}
+        widgets = {
+            'contact': forms.Select(attrs={'class': 'form-input'}),
+            'plan': forms.Select(attrs={'class': 'form-input'}),
+            'price': forms.NumberInput(attrs={'class': 'form-input', 'placeholder': "Plan price", 'min': '0', 'step': '0.01'}),
+            'start_date': forms.DateInput(attrs={'class': 'form-input', 'type': 'date'}, format='%Y-%m-%d'),
+            'end_date': forms.DateInput(attrs={'class': 'form-input', 'type': 'date'}, format='%Y-%m-%d'),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['contact'].queryset = Contact.objects.filter(pipeline='driveops').order_by('name')
+        # Retired plans stay selectable on the subscriptions already using them.
+        plans = Plan.objects.filter(is_active=True)
+        if self.instance.plan_id:
+            plans = plans | Plan.objects.filter(pk=self.instance.plan_id)
+        self.fields['plan'].queryset = plans.distinct()
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get('start_date'), cleaned.get('end_date')
+        if start and end and end <= start:
+            self.add_error('end_date', 'Must be after the start date.')
+        # A new plan picked on edit brings its billing interval (and price, if none was entered).
+        plan = cleaned.get('plan')
+        if plan and plan.pk != self.instance.plan_id:
+            self.instance.interval = plan.interval
+        return cleaned

@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 import csv
 import json
 import os
@@ -20,9 +21,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .models import (
-    Contact, ContactStatusLog, Deal, EmailCampaign, EmailSend, Meeting, Note, SavedRecipient, TodoBlock, Unsubscribe,
+    Contact, ContactStatusLog, Deal, EmailCampaign, EmailSend, Meeting, Note, Plan, SavedRecipient, Subscription,
+    TodoBlock, Unsubscribe,
 )
-from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm
+from .forms import ContactForm, DealForm, NoteForm, MeetingForm, LeadsGeneratorForm, PlanForm, SubscriptionForm
 from .services import (
     change_status, expire_one_week_prospects, merge_contacts, start_campaign, status_since_subquery,
 )
@@ -928,6 +930,113 @@ def driveops_analytics(request):
         'lost_reasons': lost_reasons,
         'lost_reasons_max': max((r['count'] for r in lost_reasons), default=0),
     })
+
+
+def _month_start(day, months_back=0):
+    """First day of the month months_back months before day's month."""
+    index = day.year * 12 + day.month - 1 - months_back
+    return day.replace(year=index // 12, month=index % 12 + 1, day=1)
+
+
+def driveops_revenue(request):
+    """Subscription income: MRR now, the last 12 months, new vs churned, and a per-plan split."""
+    today = timezone.localdate()
+    plan_form = PlanForm(request.POST or None, prefix='plan')
+    if request.method == 'POST':
+        if plan_form.is_valid():
+            plan = plan_form.save()
+            messages.success(request, f'Added plan "{plan.name}".')
+            return redirect('driveops_revenue')
+
+    subs = list(Subscription.objects.select_related('contact', 'plan'))
+    active = [s for s in subs if s.is_active_on(today)]
+    mrr = sum((s.monthly_amount for s in active), Decimal(0))
+
+    # A month's MRR is what was active on its last day (today, for the current month).
+    months = []
+    for back in range(11, -1, -1):
+        start = _month_start(today, back)
+        next_start = _month_start(today, back - 1)
+        as_of = min(next_start - timedelta(days=1), today)
+        live = [s for s in subs if s.is_active_on(as_of)]
+        months.append({
+            'start': start,
+            'mrr': sum((s.monthly_amount for s in live), Decimal(0)),
+            'subscribers': len(live),
+            'new': sum((s.monthly_amount for s in subs if start <= s.start_date < next_start), Decimal(0)),
+            'churned': sum((s.monthly_amount for s in subs
+                            if s.end_date and start <= s.end_date < next_start), Decimal(0)),
+        })
+    months_max = max((m['mrr'] for m in months), default=0)
+    this_month, last_month = months[-1], months[-2]
+
+    by_plan = {}
+    for s in active:
+        row = by_plan.setdefault(s.plan_id, {'plan': s.plan, 'subscribers': 0, 'mrr': Decimal(0)})
+        row['subscribers'] += 1
+        row['mrr'] += s.monthly_amount
+    plan_rows = sorted(by_plan.values(), key=lambda r: r['mrr'], reverse=True)
+
+    return render(request, 'crm/driveops_revenue.html', {
+        'today': today,
+        'mrr': mrr,
+        'arr': mrr * 12,
+        'active_count': len(active),
+        'arpu': mrr / len(active) if active else 0,
+        'this_month': this_month,
+        'mrr_change': this_month['mrr'] - last_month['mrr'],
+        'months': list(reversed(months)),
+        'months_max': months_max,
+        'plan_rows': plan_rows,
+        'plans': Plan.objects.annotate(n=Count('subscriptions')),
+        'plan_form': plan_form,
+        'active_subs': active,
+        'ended_subs': [s for s in subs if not s.is_active_on(today)],
+    })
+
+
+def subscription_create(request):
+    initial = {'start_date': timezone.localdate()}
+    if request.GET.get('contact', '').isdigit():
+        initial['contact'] = request.GET['contact']
+    form = SubscriptionForm(request.POST or None, initial=initial)
+    if form.is_valid():
+        sub = form.save()
+        if sub.contact.status != 'customer' and sub.is_active_on(timezone.localdate()):
+            change_status(sub.contact, 'customer', current_rep(request))
+        messages.success(request, f'{sub.contact.name} is now on {sub.plan.name}.')
+        return redirect('driveops_revenue')
+    if not Plan.objects.filter(is_active=True).exists():
+        messages.info(request, 'Add a plan on the Revenue page before adding subscriptions.')
+    return render(request, 'crm/subscription_form.html', {'form': form, 'title': 'Add Subscription'})
+
+
+def subscription_edit(request, pk):
+    sub = get_object_or_404(Subscription, pk=pk)
+    form = SubscriptionForm(request.POST or None, instance=sub)
+    if form.is_valid():
+        form.save()
+        return redirect('driveops_revenue')
+    return render(request, 'crm/subscription_form.html', {'form': form, 'title': 'Edit Subscription', 'sub': sub})
+
+
+@require_POST
+def subscription_cancel(request, pk):
+    sub = get_object_or_404(Subscription.objects.select_related('contact'), pk=pk)
+    today = timezone.localdate()
+    if sub.end_date is None or sub.end_date > today:
+        sub.end_date = max(today, sub.start_date + timedelta(days=1))
+        sub.save(update_fields=['end_date'])
+        messages.success(request, f'Cancelled {sub.contact.name}\'s subscription.')
+    return redirect('driveops_revenue')
+
+
+@require_POST
+def subscription_delete(request, pk):
+    sub = get_object_or_404(Subscription, pk=pk)
+    sub.delete()
+    messages.success(request, 'Subscription deleted.')
+    return redirect('driveops_revenue')
 
 
 def _format_duration(delta):
