@@ -1,6 +1,6 @@
 """The training programme, defined in code: four days of single-station pairs, ~60 min each.
 
-A lift's working weight is shared wherever it appears (e.g. cable lateral raise on Mon and Thu).
+A lift's working weight is shared wherever it appears (e.g. cable lateral raise on days 1 and 3).
 """
 from dataclasses import dataclass
 from decimal import Decimal
@@ -68,23 +68,21 @@ LIFTS = _lifts(
     ('incline_db_row', 'Incline DB row', 'dumbbell'),
     ('cable_lateral_raise', 'Cable lateral raise', 'stack'),
     ('rope_pushdown', 'Rope pushdown', 'stack'),
-    ('back_squat', 'Back squat', 'barbell'),
+    ('back_squat', 'Belt back squat', 'barbell'),
     ('rdl', 'Romanian deadlift', 'barbell'),
     ('leg_press', 'Leg press', 'plates'),
-    ('leg_press_calf', 'Leg-press calf raise', 'plates'),
-    ('lying_leg_curl', 'Lying leg curl', 'stack'),
-    ('plank', 'Plank', 'time'),
+    ('standing_calf_raise', 'Standing calf raise', 'stack'),
+    ('standing_leg_curl', 'Standing leg curl', 'stack'),
     ('ohp', 'Overhead press', 'barbell'),
     ('lat_pulldown', 'Lat pulldown', 'stack'),
     ('seated_cable_row', 'Seated cable row', 'stack'),
     ('cable_fly', 'Cable fly', 'stack'),
-    ('db_curl', 'DB curl', 'dumbbell'),
-    ('db_oh_triceps', 'DB overhead triceps extension', 'dumbbell'),
+    ('bayesian_cable_curl', 'Bayesian cable curl', 'stack'),
+    ('db_oh_triceps', 'Seated overhead triceps extension', 'dumbbell'),
     ('deadlift', 'Deadlift', 'barbell'),
     ('front_squat', 'Front squat / pause squat', 'barbell'),
     ('bulgarian_split_squat', 'Bulgarian split squat', 'dumbbell'),
     ('leg_extension', 'Leg extension', 'stack'),
-    ('db_calf_raise', 'DB calf raise on step', 'dumbbell'),
 )
 
 
@@ -113,9 +111,8 @@ DAYS = [
         _s('back_squat', 4, 5, 6, '3 min', 180),
         _s('rdl', 3, 8, 8, '2 min', 120),
         _s('leg_press', 3, 10, 12, group='A1'),
-        _s('leg_press_calf', 3, 12, 15, '75 s after pair', 75, 'A2'),
-        _s('lying_leg_curl', 3, 10, 12, group='B1'),
-        _s('plank', 3, 45, 45, '45 s after pair', 45, 'B2'),
+        _s('standing_calf_raise', 3, 12, 15, '75 s after pair', 75, 'A2'),
+        _s('standing_leg_curl', 3, 10, 12, '45 s', 45),
     )),
     Day('day3', 'Day 3', 'Upper — Shoulders & Back', (
         _s('ohp', 4, 6, 8, '2.5 min', 150),
@@ -123,16 +120,15 @@ DAYS = [
         _s('seated_cable_row', 3, 10, 12, '75 s', 75),
         _s('cable_fly', 3, 12, 15, group='B1'),
         _s('cable_lateral_raise', 3, 12, 15, '45 s after pair', 45, 'B2'),
-        _s('db_curl', 3, 10, 12, group='C1'),
+        _s('bayesian_cable_curl', 3, 10, 12, group='C1'),
         _s('db_oh_triceps', 3, 10, 12, '45 s after pair', 45, 'C2'),
     )),
     Day('day4', 'Day 4', 'Lower — Deadlift', (
         _s('deadlift', 3, 5, 5, '3 min', 180),
         _s('front_squat', 3, 8, 8, '2 min', 120),
-        _s('bulgarian_split_squat', 3, 8, 10, group='A1', per_leg=True),
-        _s('plank', 3, 45, 45, '60 s after pair', 60, 'A2'),
-        _s('leg_extension', 3, 12, 15, group='B1'),
-        _s('db_calf_raise', 3, 12, 15, '45 s after pair', 45, 'B2'),
+        _s('bulgarian_split_squat', 3, 8, 10, '60 s', 60, per_leg=True),
+        _s('leg_extension', 3, 12, 15, group='A1'),
+        _s('standing_calf_raise', 3, 12, 15, '45 s after pair', 45, 'A2'),
     )),
 ]
 DAYS_BY_SLUG = {d.slug: d for d in DAYS}

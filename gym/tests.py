@@ -69,7 +69,8 @@ class GymViewTests(TestCase):
         self.assertEqual(Workout.objects.count(), 1)
 
     def test_skipped_exercises_are_not_logged(self):
-        response = self.post_day('day2', **{'w-back_squat': '80', 'r-back_squat-0': '6', 'r-plank-0': '45'})
+        response = self.post_day('day4', **{'w-deadlift': '120', 'r-deadlift-0': '5', 'r-leg_extension-0': '12'})
         self.assertRedirects(response, reverse('gym:home'))
-        self.assertEqual(set(LiftLog.objects.values_list('slug', flat=True)), {'back_squat', 'plank'})
-        self.assertFalse(LiftState.objects.filter(slug='plank').exists())
+        self.assertEqual(set(LiftLog.objects.values_list('slug', flat=True)), {'deadlift', 'leg_extension'})
+        # No weight entered for leg extension, so there's nothing to progress from.
+        self.assertFalse(LiftState.objects.filter(slug='leg_extension').exists())
