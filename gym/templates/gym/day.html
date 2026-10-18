@@ -31,16 +31,21 @@
   .step:active { background: var(--line); }
   .weight label { flex: 1; min-width: 0; position: relative; }
   .weight input { width: 100%; height: 52px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); text-align: center; font: 800 30px "Barlow Condensed", sans-serif; padding: 0 30px 0 8px; }
-  .weight input:focus, .sets input:focus { outline: none; border-color: var(--lime); }
+  .weight input:focus { outline: none; border-color: var(--lime); }
   .weight .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 600; pointer-events: none; }
-
-  .sets { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-  .sets label { display: block; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-  .sets input { margin-top: 4px; width: 100%; height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); text-align: center; font: 600 20px Barlow, sans-serif; }
-  .sets input.short { border-color: var(--amber); color: var(--amber); }
 
   .hint { margin-top: 12px; font-size: 14px; color: var(--muted); }
   .hint b { color: var(--lime); font-weight: 600; }
+  .locked { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; }
+  .locked .kg { font: 800 46px/1 "Barlow Condensed", sans-serif; }
+  .locked .kg small { font-size: 20px; color: var(--muted); margin-left: 3px; }
+  .locked .lock { font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .progress { display: flex; gap: 5px; margin-top: 12px; }
+  .progress i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .progress i.on { background: var(--lime); }
+  .progress i.today { background: repeating-linear-gradient(90deg, var(--lime) 0 4px, transparent 4px 7px); }
+  .up-today { margin-top: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(198,255,61,.1); color: var(--lime); font-weight: 600; font-size: 14px; }
+  .setup { margin-top: 14px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--amber); color: var(--amber); font-size: 14px; }
   .plates { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 8px; font-size: 13px; color: var(--muted); }
   .plate { padding: 2px 7px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-weight: 600; }
 
@@ -59,7 +64,7 @@
 
 <div class="head">
   <h1>{{ day.title }}</h1>
-  <p>{% if last_done %}Last done {{ last_done.completed_at|date:"D j M" }}{% else %}First time on this day{% endif %} · Reps are pre-filled at the target — only change the ones you missed.</p>
+  <p>{% if last_done %}Last done {{ last_done.completed_at|date:"D j M" }}{% else %}First time on this day{% endif %} · Working weights are locked — just lift, then tap Complete.</p>
 </div>
 
 <form method="post" id="day-form">
@@ -71,42 +76,34 @@
         <h3>{% if c.slot.group %}<span class="group">{{ c.slot.group }}</span>{% endif %}{{ c.lift.name }}</h3>
         <div class="meta"><b>{{ c.slot.target }}</b>{% if c.slot.rest %} · rest {{ c.slot.rest }}{% endif %} · {{ c.lift.equipment_label }}</div>
       </div>
-      {% if not c.lift.timed %}<a href="{% url 'gym:lift' c.lift.slug %}" class="muted" style="font-size:13px;padding:4px 0 4px 8px;white-space:nowrap">History</a>{% endif %}
+      <a href="{% url 'gym:lift' c.lift.slug %}" class="muted" style="font-size:13px;padding:4px 0 4px 8px;white-space:nowrap">History</a>
     </div>
 
-    {% if not c.lift.timed %}
+    {% if c.set %}
+    <div class="locked">
+      <span class="kg">{{ c.weight }}<small>kg</small></span>
+      <span class="lock">🔒 Locked</span>
+    </div>
+    {% if c.plates is not None %}<div class="plates">{% if c.plates %}Each side: {% for p in c.plates %}<span class="plate">{{ p }}</span>{% endfor %}{% else %}Empty bar{% endif %}</div>{% endif %}
+    <div class="progress" aria-hidden="true">{% for on in c.dots %}<i class="{% if on %}on{% elif forloop.counter0 == c.done %}today{% endif %}"></i>{% endfor %}</div>
+    {% if c.left == 1 %}
+    <div class="up-today">↑ Complete today and it goes up to {{ c.next_weight }} kg</div>
+    {% else %}
+    <div class="hint">Session {{ c.done|add:1 }} of {{ c.needed }} at this weight · <b>{{ c.next_weight }} kg</b> after session {{ c.needed }}</div>
+    {% endif %}
+    {% else %}
     <div class="weight">
       <button type="button" class="step" data-step="-{{ c.increment }}" aria-label="Less weight">−</button>
       <label>
-        <input type="text" inputmode="decimal" name="w-{{ c.lift.slug }}" value="{{ c.weight }}" placeholder="0" autocomplete="off"
+        <input type="text" inputmode="decimal" name="w-{{ c.lift.slug }}" value="" placeholder="0" autocomplete="off"
                data-plates="{% if c.lift.equipment == 'barbell' %}1{% endif %}">
         <span class="unit">kg</span>
       </label>
       <button type="button" class="step" data-step="{{ c.increment }}" aria-label="More weight">+</button>
     </div>
     {% if c.lift.equipment == 'barbell' %}<div class="plates" data-plates-out></div>{% endif %}
+    <div class="hint">Starting weight for {{ c.slot.high }} clean reps. It locks in when you complete the day.</div>
     {% endif %}
-
-    <div class="sets" style="--n: {{ c.slot.sets }}">
-      {% for r in c.reps %}
-      <label>Set {{ forloop.counter }}
-        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" name="r-{{ c.lift.slug }}-{{ forloop.counter0 }}" value="{{ r }}"
-               data-low="{{ c.slot.low }}">
-      </label>
-      {% endfor %}
-    </div>
-
-    <div class="hint">
-      {% if c.lift.timed %}
-        Seconds held per set.
-      {% elif not c.weight %}
-        Enter a starting weight you can do for {{ c.slot.high }} clean reps.
-      {% elif c.up_to %}
-        Hit <b>{{ c.slot.high }}</b> on all {{ c.slot.sets }} sets → <b>{{ c.up_to }} kg</b> next time.
-        {% if c.misses %}<br><span style="color:var(--amber)">Missed the range last time — miss again and it drops ~10%.</span>{% endif %}
-      {% endif %}
-      {% if c.last %}<br>Last: {{ c.last_weight|default:"—" }}{% if c.last_weight %} kg{% endif %} × {{ c.last_reps }}{% endif %}
-    </div>
 
     {% if c.slot.rest_seconds %}
     <button type="button" class="rest" data-seconds="{{ c.slot.rest_seconds }}">Rest timer · {{ c.slot.rest }}</button>
@@ -149,8 +146,6 @@
     input.dispatchEvent(new Event('input'));
   }));
 
-  function markShort(input) { input.classList.toggle('short', input.value !== '' && +input.value < +input.dataset.low); }
-  document.querySelectorAll('.sets input').forEach(i => { i.addEventListener('focus', () => i.select()); i.addEventListener('input', () => markShort(i)); });
   document.querySelectorAll('.weight input').forEach(i => i.addEventListener('focus', () => i.select()));
 
   // One rest timer at a time; tap again to cancel.
@@ -176,7 +171,7 @@
   });
 
   document.getElementById('day-form').addEventListener('submit', e => {
-    if (!confirm('Complete {{ day.short }} and work out next session’s weights?')) e.preventDefault();
+    if (!confirm('Complete {{ day.short }}?')) e.preventDefault();
   });
 })();
 </script>

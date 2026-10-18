@@ -28,12 +28,12 @@
 {% block content %}
 <div class="head">
   <h1>{{ lift.name }}</h1>
-  <p>{{ lift.equipment_label }}{% if lift.increment %} · jumps of {{ lift.increment.normalize }} kg{% endif %}</p>
+  <p>{{ lift.equipment_label }} · {{ kind_label }} · jumps of {{ progress.increment }} kg</p>
 </div>
 
 <div class="stats">
-  <div class="panel stat"><b class="lime">{{ weight|default:"—" }}{% if weight %}<small style="font-size:16px"> kg</small>{% endif %}</b><span>next session</span></div>
-  {% if show_e1rm %}<div class="panel stat"><b>{{ best_e1rm|default:"—" }}{% if best_e1rm %}<small style="font-size:16px"> kg</small>{% endif %}</b><span>best est. 1RM</span></div>{% endif %}
+  <div class="panel stat"><b class="lime">{{ progress.weight|default:"—" }}{% if progress.set %}<small style="font-size:16px"> kg</small>{% endif %}</b><span>working weight</span></div>
+  {% if progress.set %}<div class="panel stat"><b>{{ progress.done }}/{{ progress.needed }}</b><span>sessions to {{ progress.next_weight }} kg</span></div>{% endif %}
 </div>
 
 {% if chart %}
@@ -53,12 +53,11 @@
   <div class="row">
     <div>
       <div>{{ r.log.workout.label }} · {{ r.log.workout.completed_at|date:"j M Y" }}</div>
-      <div class="sub">Reps {{ r.reps }}</div>
     </div>
     <div>
       <div class="kg">{{ r.weight|default:"—" }}{% if r.weight %}<small style="font-size:14px;color:var(--muted)"> kg</small>{% endif %}</div>
       <div style="text-align:right;margin-top:4px">
-        {% if r.log.outcome == 'up' %}<span class="tag up">↑ {{ r.next }}</span>{% elif r.log.outcome == 'deload' %}<span class="tag deload">↓ {{ r.next }}</span>{% elif r.log.outcome == 'miss' %}<span class="tag miss">Missed</span>{% else %}<span class="tag hold">Hold</span>{% endif %}
+        {% if r.log.outcome == 'up' %}<span class="tag up">↑ {{ r.next }}</span>{% else %}<span class="tag hold">Hold</span>{% endif %}
       </div>
     </div>
   </div>

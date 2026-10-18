@@ -16,4 +16,4 @@ class WorkoutAdmin(admin.ModelAdmin):
 
 @admin.register(LiftState)
 class LiftStateAdmin(admin.ModelAdmin):
-    list_display = ('slug', 'weight', 'misses', 'updated_at')
+    list_display = ('slug', 'weight', 'sessions', 'updated_at')

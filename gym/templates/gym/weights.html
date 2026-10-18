@@ -1,0 +1,77 @@
+{% extends 'gym/base.html' %}
+
+{% block title %}Working weights · Gym{% endblock %}
+
+{% block topbar %}
+  <a href="{% url 'gym:home' %}" class="ghost" style="padding-left:0">← Back</a>
+  <span class="brand" style="font-size:20px">WEIGHTS<span>.</span></span>
+  <span style="width:50px"></span>
+{% endblock %}
+
+{% block style %}
+  body { padding-bottom: calc(110px + var(--safe-bottom)); }
+  .head { margin: 18px 0 6px; }
+  .head h1 { font-size: 34px; font-weight: 800; line-height: 1.05; }
+  .head p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+  .row { padding: 14px 16px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row .name { font-weight: 600; }
+  .row .sub { font-size: 13px; color: var(--muted); }
+  .weight { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .step { flex: 0 0 48px; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: 600 24px/1 Barlow, sans-serif; }
+  .step:active { background: var(--line); }
+  .weight label { flex: 1; min-width: 0; position: relative; }
+  .weight input { width: 100%; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); text-align: center; font: 800 26px "Barlow Condensed", sans-serif; padding: 0 30px 0 8px; }
+  .weight input:focus { outline: none; border-color: var(--lime); }
+  .weight input.changed { border-color: var(--amber); color: var(--amber); }
+  .weight .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 600; pointer-events: none; }
+  .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 12px 16px calc(12px + var(--safe-bottom)); background: linear-gradient(to top, var(--bg) 70%, rgba(11,12,10,0)); }
+  .dock .btn { max-width: 528px; margin: 0 auto; }
+{% endblock %}
+
+{% block content %}
+<div class="head">
+  <h1>Working weights</h1>
+  <p>Only change these if a weight is too easy or too heavy. A changed weight restarts its count towards the next automatic increase.</p>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="panel">
+    {% for r in rows %}
+    <div class="row">
+      <div class="name">{{ r.lift.name }}</div>
+      <div class="sub">{{ r.lift.equipment_label }} · jumps of {{ r.increment }} kg{% if r.set %} · {{ r.done }}/{{ r.needed }} sessions done{% endif %}</div>
+      <div class="weight">
+        <button type="button" class="step" data-step="-{{ r.increment }}" aria-label="Less weight">−</button>
+        <label>
+          <input type="text" inputmode="decimal" name="w-{{ r.lift.slug }}" value="{{ r.weight }}" data-original="{{ r.weight }}" placeholder="Not set" autocomplete="off">
+          <span class="unit">kg</span>
+        </label>
+        <button type="button" class="step" data-step="{{ r.increment }}" aria-label="More weight">+</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="dock"><button type="submit" class="btn">Save weights</button></div>
+</form>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  const fmt = n => String(Math.round(n * 100) / 100);
+  const mark = i => i.classList.toggle('changed', i.value !== i.dataset.original);
+  document.querySelectorAll('.weight input').forEach(i => {
+    i.addEventListener('focus', () => i.select());
+    i.addEventListener('input', () => mark(i));
+  });
+  document.querySelectorAll('.step').forEach(btn => btn.addEventListener('click', () => {
+    const input = btn.parentElement.querySelector('input');
+    const cur = parseFloat(input.value.replace(',', '.')) || 0;
+    input.value = fmt(Math.max(0, cur + parseFloat(btn.dataset.step)));
+    mark(input);
+  }));
+})();
+</script>
+{% endblock %}

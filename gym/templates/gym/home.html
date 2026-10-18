@@ -23,6 +23,12 @@
   .list .sub { font-size: 13px; color: var(--muted); }
   .list .kg { font: 800 22px/1 "Barlow Condensed", sans-serif; white-space: nowrap; }
   .list .kg small { font-size: 14px; color: var(--muted); font-weight: 600; margin-left: 2px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; }
+  .edit-btn { margin: 16px 0 0; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--lime); color: var(--lime); font: 600 15px "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+  .setup-note { margin: 0 0 10px; font-size: 14px; color: var(--amber); }
+  .mini { display: flex; gap: 3px; margin-top: 6px; width: 96px; }
+  .mini i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+  .mini i.on { background: var(--lime); }
   .undo { background: none; border: 0; color: var(--red); font: 600 14px Barlow, sans-serif; padding: 8px 0 8px 12px; }
 {% endblock %}
 
@@ -50,17 +56,25 @@
   {% endfor %}
 </div>
 
-<h2 class="section-label">Working weights</h2>
+<div class="section-head">
+  <h2 class="section-label">Working weights</h2>
+  <a href="{% url 'gym:weights' %}" class="edit-btn">Edit weights</a>
+</div>
+{% if unset_count %}<p class="setup-note">{{ unset_count }} not set yet. Enter them on the Edit weights page, or on the day itself the first time. After that they're locked and go up automatically.</p>{% endif %}
 <div class="panel list">
   {% for row in lifts %}
   <a href="{% url 'gym:lift' row.lift.slug %}">
-    <div>
+    <div style="min-width:0">
       <div class="name">{{ row.lift.name }}</div>
-      <div class="sub">{{ row.lift.equipment_label }}{% if row.e1rm %} · e1RM {{ row.e1rm }} kg{% endif %}</div>
+      {% if row.set %}
+      <div class="sub">{% if row.left == 1 %}<span class="lime">↑ {{ row.next_weight }} kg after next session</span>{% else %}{{ row.next_weight }} kg in {{ row.left }} sessions{% endif %}</div>
+      <div class="mini">{% for on in row.dots %}<i class="{% if on %}on{% endif %}"></i>{% endfor %}</div>
+      {% else %}
+      <div class="sub">{{ row.lift.equipment_label }}</div>
+      {% endif %}
     </div>
     <div style="text-align:right">
-      {% if row.weight %}<div class="kg">{{ row.weight }}<small>kg</small></div>{% else %}<div class="sub">Not set</div>{% endif %}
-      {% if row.outcome == 'up' %}<span class="tag up">↑ Weight up</span>{% elif row.outcome == 'deload' %}<span class="tag deload">Deload</span>{% elif row.outcome == 'miss' %}<span class="tag miss">Missed</span>{% endif %}
+      {% if row.set %}<div class="kg">{{ row.weight }}<small>kg</small></div>{% else %}<div class="sub" style="color:var(--amber)">Not set</div>{% endif %}
     </div>
   </a>
   {% endfor %}

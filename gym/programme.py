@@ -11,7 +11,15 @@ EQUIPMENT = {
     'dumbbell': {'label': 'Dumbbells (per hand)', 'increment': Decimal('2')},
     'stack': {'label': 'Weight stack', 'increment': Decimal('2.5')},
     'plates': {'label': 'Plate-loaded', 'increment': Decimal('5')},     # 2.5 kg a side
-    'time': {'label': 'Timed hold', 'increment': None},
+}
+
+# How fast each kind of lift should climb, as a share of its working weight per session. The calculator
+# turns this into "sessions at this weight before the next jump": a 5 kg jump on a 140 kg deadlift comes
+# round far sooner than a 2 kg jump on 12 kg curls.
+KINDS = {
+    'main': {'label': 'Main lift', 'rate': Decimal('0.025')},
+    'compound': {'label': 'Compound', 'rate': Decimal('0.02')},
+    'isolation': {'label': 'Isolation', 'rate': Decimal('0.015')},
 }
 
 BAR_KG = Decimal('20')
@@ -24,6 +32,7 @@ class Lift:
     slug: str
     name: str
     equipment: str
+    kind: str
 
     @property
     def increment(self):
@@ -34,8 +43,8 @@ class Lift:
         return EQUIPMENT[self.equipment]['label']
 
     @property
-    def timed(self):
-        return self.equipment == 'time'
+    def rate(self):
+        return KINDS[self.kind]['rate']
 
 
 @dataclass(frozen=True)
@@ -43,7 +52,7 @@ class Slot:
     """One exercise as it appears on a given day."""
     lift: Lift
     sets: int
-    low: int            # reps (or seconds for a timed hold)
+    low: int
     high: int
     rest: str = ''      # shown on the solo lift, or on the last lift of a pair
     rest_seconds: int = 0
@@ -52,37 +61,36 @@ class Slot:
 
     @property
     def target(self):
-        unit = 's' if self.lift.timed else ''
         reps = f'{self.low}' if self.low == self.high else f'{self.low}–{self.high}'
-        return f'{self.sets} × {reps}{unit}{"/leg" if self.per_leg else ""}'
+        return f'{self.sets} × {reps}{"/leg" if self.per_leg else ""}'
 
 
 def _lifts(*rows):
-    return {slug: Lift(slug, name, kit) for slug, name, kit in rows}
+    return {slug: Lift(slug, name, kit, kind) for slug, name, kit, kind in rows}
 
 
 LIFTS = _lifts(
-    ('bench', 'Bench press', 'barbell'),
-    ('heavy_lat_pulldown', 'Heavy lat pulldown', 'stack'),  # own weight: 6–8 reps vs 10–12 on day 3
-    ('incline_db_press', 'Incline DB press', 'dumbbell'),
-    ('incline_db_row', 'Incline DB row', 'dumbbell'),
-    ('cable_lateral_raise', 'Cable lateral raise', 'stack'),
-    ('rope_pushdown', 'Rope pushdown', 'stack'),
-    ('back_squat', 'Belt back squat', 'barbell'),
-    ('rdl', 'Romanian deadlift', 'barbell'),
-    ('leg_press', 'Leg press', 'plates'),
-    ('standing_calf_raise', 'Standing calf raise', 'stack'),
-    ('standing_leg_curl', 'Standing leg curl', 'stack'),
-    ('ohp', 'Overhead press', 'barbell'),
-    ('lat_pulldown', 'Lat pulldown', 'stack'),
-    ('seated_cable_row', 'Seated cable row', 'stack'),
-    ('cable_fly', 'Cable fly', 'stack'),
-    ('bayesian_cable_curl', 'Bayesian cable curl', 'stack'),
-    ('db_oh_triceps', 'Seated overhead triceps extension', 'dumbbell'),
-    ('deadlift', 'Deadlift', 'barbell'),
-    ('front_squat', 'Front squat / pause squat', 'barbell'),
-    ('bulgarian_split_squat', 'Bulgarian split squat', 'dumbbell'),
-    ('leg_extension', 'Leg extension', 'stack'),
+    ('bench', 'Bench press', 'barbell', 'main'),
+    ('heavy_lat_pulldown', 'Heavy lat pulldown', 'stack', 'compound'),  # own weight: 6–8 reps vs 10–12 on day 3
+    ('incline_db_press', 'Incline DB press', 'dumbbell', 'compound'),
+    ('incline_db_row', 'Incline DB row', 'dumbbell', 'compound'),
+    ('cable_lateral_raise', 'Cable lateral raise', 'stack', 'isolation'),
+    ('rope_pushdown', 'Rope pushdown', 'stack', 'isolation'),
+    ('back_squat', 'Belt back squat', 'barbell', 'main'),
+    ('rdl', 'Romanian deadlift', 'barbell', 'compound'),
+    ('leg_press', 'Leg press', 'plates', 'compound'),
+    ('standing_calf_raise', 'Standing calf raise', 'stack', 'isolation'),
+    ('standing_leg_curl', 'Standing leg curl', 'stack', 'isolation'),
+    ('ohp', 'Overhead press', 'barbell', 'main'),
+    ('lat_pulldown', 'Lat pulldown', 'stack', 'compound'),
+    ('seated_cable_row', 'Seated cable row', 'stack', 'compound'),
+    ('cable_fly', 'Cable fly', 'stack', 'isolation'),
+    ('bayesian_cable_curl', 'Bayesian cable curl', 'stack', 'isolation'),
+    ('db_oh_triceps', 'Seated overhead triceps extension', 'dumbbell', 'isolation'),
+    ('deadlift', 'Deadlift', 'barbell', 'main'),
+    ('front_squat', 'Front squat / pause squat', 'barbell', 'compound'),
+    ('bulgarian_split_squat', 'Bulgarian split squat', 'dumbbell', 'compound'),
+    ('leg_extension', 'Leg extension', 'stack', 'isolation'),
 )
 
 

@@ -12,8 +12,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import LiftLog, LiftState, Workout
-from .programme import DAYS, DAYS_BY_SLUG, LIFTS
-from .progression import DELOADED, UP, estimated_1rm, next_weight, plates_per_side
+from .programme import DAYS, DAYS_BY_SLUG, KINDS, LIFTS
+from .progression import after_session, plates_per_side, sessions_needed
 
 # The gym clock: "today" and workout dates are shown in local time, not the server's UTC.
 GYM_TZ = ZoneInfo('Africa/Johannesburg')
@@ -29,14 +29,6 @@ def _activate_tz(view):
 
 def _states():
     return {s.slug: s for s in LiftState.objects.all()}
-
-
-def _last_logs():
-    """Most recent log per lift slug."""
-    last = {}
-    for log in LiftLog.objects.select_related('workout').order_by('workout__completed_at', 'pk'):
-        last[log.slug] = log
-    return last
 
 
 def _next_day(last_workout):
@@ -65,12 +57,19 @@ def _parse_weight(raw):
     return value if value >= 0 else None
 
 
-def _parse_reps(raw):
-    try:
-        value = int((raw or '').strip())
-    except ValueError:
-        return None
-    return value if value >= 0 else None
+def _progress(lift, state):
+    """Where a lift stands on its way to the next automatic increase."""
+    weight = state.weight if state else None
+    if weight is None:
+        return {'lift': lift, 'weight': '', 'set': False, 'increment': _fmt(lift.increment)}
+    needed = sessions_needed(lift, weight)
+    done = state.sessions
+    return {
+        'lift': lift, 'set': True, 'weight': _fmt(weight), 'next_weight': _fmt(weight + lift.increment),
+        'increment': _fmt(lift.increment), 'done': done, 'needed': needed, 'left': needed - done,
+        'dots': [i < done for i in range(needed)],
+        'plates': [_fmt(p) for p in plates_per_side(weight) or []] if lift.equipment == 'barbell' else None,
+    }
 
 
 @_activate_tz
@@ -83,49 +82,14 @@ def home(request):
         last_by_day.setdefault(slug, completed_at)
 
     states = _states()
-    last_logs = _last_logs()
-    lifts = []
-    for lift in LIFTS.values():
-        if lift.timed:
-            continue
-        state = states.get(lift.slug)
-        log = last_logs.get(lift.slug)
-        lifts.append({
-            'lift': lift,
-            'weight': _fmt(state.weight) if state else '',
-            'outcome': log.outcome if log else '',
-            'e1rm': _fmt(estimated_1rm(log.weight, log.reps)) if log and lift.equipment in ('barbell', 'dumbbell') else '',
-        })
-
+    lifts = [_progress(lift, states.get(lift.slug)) for lift in LIFTS.values()]
     days = [{'day': d, 'last': last_by_day.get(d.slug), 'is_next': d == up_next} for d in DAYS]
     return render(request, 'gym/home.html', {
         'days': days, 'up_next': up_next, 'lifts': lifts, 'workouts': workouts,
+        'unset_count': sum(not row['set'] for row in lifts),
         'week_count': Workout.objects.filter(completed_at__gte=timezone.now() - timedelta(days=7)).count(),
         'total_count': Workout.objects.count(),
     })
-
-
-def _card(slot, state, last_log):
-    lift = slot.lift
-    weight = state.weight if state else None
-    target = slot.high
-    card = {
-        'slot': slot,
-        'lift': lift,
-        'weight': _fmt(weight),
-        'increment': _fmt(lift.increment) if lift.increment else '',
-        'reps': [target] * slot.sets,
-        'last': last_log,
-        'last_reps': ', '.join(str(r) for r in last_log.reps) if last_log else '',
-        'last_weight': _fmt(last_log.weight) if last_log else '',
-        'misses': state.misses if state else 0,
-        'plates': None,
-    }
-    if lift.equipment == 'barbell':
-        card['plates'] = [_fmt(p) for p in plates_per_side(weight) or []] if weight else None
-    if weight is not None and lift.increment:
-        card['up_to'] = _fmt(weight + lift.increment)
-    return card
 
 
 @_activate_tz
@@ -138,11 +102,12 @@ def day(request, day):
         return _complete_day(request, programme_day)
 
     states = _states()
-    last_logs = _last_logs()
-    cards = [_card(slot, states.get(slot.lift.slug), last_logs.get(slot.lift.slug)) for slot in programme_day.slots]
+    cards = [{'slot': slot, **_progress(slot.lift, states.get(slot.lift.slug))} for slot in programme_day.slots]
     last_done = Workout.objects.filter(day=programme_day.slug).first()
-    return render(request, 'gym/day.html', {'day': programme_day, 'cards': cards, 'last_done': last_done,
-                                            'days': DAYS})
+    return render(request, 'gym/day.html', {
+        'day': programme_day, 'cards': cards, 'last_done': last_done, 'days': DAYS,
+        'any_unset': any(not c['set'] for c in cards),
+    })
 
 
 def _complete_day(request, programme_day):
@@ -151,31 +116,53 @@ def _complete_day(request, programme_day):
         workout = Workout.objects.create(day=programme_day.slug, completed_at=timezone.now())
         ups = []
         for slot in programme_day.slots:
-            slug = slot.lift.slug
-            reps = [r for r in (_parse_reps(request.POST.get(f'r-{slug}-{n}')) for n in range(slot.sets)) if r is not None]
-            if not reps:
-                continue  # exercise skipped
-            state = states.get(slug) or LiftState(slug=slug)
-            weight = None if slot.lift.timed else _parse_weight(request.POST.get(f'w-{slug}'))
-            new_weight, misses, outcome = next_weight(weight, reps, slot, state.misses)
+            lift = slot.lift
+            state = states.get(lift.slug) or LiftState(slug=lift.slug)
+            prev_weight, prev_sessions = state.weight, state.sessions
+            if state.weight is None:
+                # First time: lock in the weight entered on the day page.
+                state.weight, state.sessions = _parse_weight(request.POST.get(f'w-{lift.slug}')), 0
+                if state.weight is None:
+                    continue
+            weight = state.weight
+            state.weight, state.sessions, went_up = after_session(lift, weight, state.sessions)
+            state.save()
+            states[lift.slug] = state
             LiftLog.objects.create(
-                workout=workout, slug=slug, weight=weight, reps=reps, outcome=outcome, next_weight=new_weight,
-                prev_weight=state.weight, prev_misses=state.misses,
+                workout=workout, slug=lift.slug, weight=weight, outcome='up' if went_up else 'hold',
+                next_weight=state.weight, prev_weight=prev_weight, prev_sessions=prev_sessions,
             )
-            if weight is not None:
-                state.weight, state.misses = new_weight, misses
-                state.save()
-                states[slug] = state
-            if outcome == UP:
-                ups.append(f'{slot.lift.name} → {_fmt(new_weight)} kg')
-            elif outcome == DELOADED:
-                ups.append(f'{slot.lift.name} deload → {_fmt(new_weight)} kg')
+            if went_up:
+                ups.append(f'{lift.name} {_fmt(weight)} → {_fmt(state.weight)} kg')
 
     if ups:
-        messages.success(request, f'{programme_day.short} done. Next time: ' + '; '.join(ups) + '.')
+        messages.success(request, f'{programme_day.short} done. Weight goes up: ' + '; '.join(ups) + '.')
     else:
-        messages.success(request, f'{programme_day.short} done. Same weights next time — chase the reps.')
+        messages.success(request, f'{programme_day.short} done. Same weights next time.')
     return redirect('gym:home')
+
+
+@_activate_tz
+def weights(request):
+    """Manual override for the locked working weights; changing one restarts its session count."""
+    states = _states()
+    if request.method == 'POST':
+        changed = []
+        with transaction.atomic():
+            for lift in LIFTS.values():
+                new = _parse_weight(request.POST.get(f'w-{lift.slug}'))
+                state = states.get(lift.slug) or LiftState(slug=lift.slug)
+                if new is None or new == state.weight:
+                    continue
+                state.weight, state.sessions = new, 0
+                state.save()
+                changed.append(f'{lift.name} {_fmt(new)} kg')
+        if changed:
+            messages.success(request, 'Working weights updated: ' + '; '.join(changed) + '.')
+        return redirect('gym:home')
+
+    rows = [_progress(lift, states.get(lift.slug)) for lift in LIFTS.values()]
+    return render(request, 'gym/weights.html', {'rows': rows})
 
 
 @require_POST
@@ -186,10 +173,8 @@ def undo_last(request):
         if workout is None:
             return redirect('gym:home')
         for log in workout.logs.all():
-            if log.weight is None:
-                continue
             LiftState.objects.update_or_create(
-                slug=log.slug, defaults={'weight': log.prev_weight, 'misses': log.prev_misses})
+                slug=log.slug, defaults={'weight': log.prev_weight, 'sessions': log.prev_sessions})
         label = workout.label
         workout.delete()
     messages.success(request, f'Undid the last {label} session.')
@@ -205,30 +190,24 @@ def lift(request, slug):
     state = LiftState.objects.filter(slug=slug).first()
 
     # Weight over time as an inline SVG polyline.
-    points = [(log.workout.completed_at, log.weight) for log in logs if log.weight is not None]
+    points = [log.weight for log in logs if log.weight is not None]
     chart = None
     if len(points) >= 2:
         w, h, pad = 320, 120, 10
-        weights = [p[1] for p in points]
-        lo, hi = min(weights), max(weights)
+        lo, hi = min(points), max(points)
         span = (hi - lo) or Decimal('1')
         coords = []
-        for i, (_, wt) in enumerate(points):
+        for i, wt in enumerate(points):
             x = pad + (w - 2 * pad) * i / (len(points) - 1)
             y = h - pad - float((wt - lo) / span) * (h - 2 * pad)
             coords.append((round(x, 1), round(y, 1)))
         chart = {'w': w, 'h': h, 'points': ' '.join(f'{x},{y}' for x, y in coords), 'last': coords[-1],
                  'lo': _fmt(lo), 'hi': _fmt(hi)}
 
-    rows = [{
-        'log': log, 'weight': _fmt(log.weight), 'next': _fmt(log.next_weight),
-        'reps': ' · '.join(str(r) for r in log.reps),
-    } for log in reversed(logs)]
-    best = max((estimated_1rm(log.weight, log.reps) or 0 for log in logs), default=0)
+    rows = [{'log': log, 'weight': _fmt(log.weight), 'next': _fmt(log.next_weight)} for log in reversed(logs)]
     return render(request, 'gym/lift.html', {
-        'lift': lift_def, 'state': state, 'weight': _fmt(state.weight) if state else '',
-        'rows': rows, 'chart': chart, 'best_e1rm': _fmt(best) if best else '',
-        'show_e1rm': lift_def.equipment in ('barbell', 'dumbbell'),
+        'lift': lift_def, 'progress': _progress(lift_def, state), 'rows': rows, 'chart': chart,
+        'kind_label': KINDS[lift_def.kind]['label'],
     })
 
 

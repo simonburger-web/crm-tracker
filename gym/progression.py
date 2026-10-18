@@ -1,38 +1,30 @@
-"""The overload calculator: double progression, rounded to what the kit can actually load.
+"""The overload calculator. Working weights are locked; the app raises them, not the lifter.
 
-- Every set hits the top of the rep range -> add one increment next session.
-- Inside the range -> same weight, chase more reps.
-- Any set short of the bottom of the range two sessions running -> drop ~10%.
+Each completed session at a weight counts toward the next jump. How many sessions that takes depends on
+the lift: the kit's smallest jump compared with how fast that kind of lift should climb at that weight.
 """
-from decimal import ROUND_FLOOR, Decimal
+import math
 
 from .programme import BAR_KG, PLATES_KG
 
-MISSES_BEFORE_DELOAD = 2
-DELOAD = Decimal('0.9')
-
-UP, HOLD, MISS, DELOADED = 'up', 'hold', 'miss', 'deload'
+MIN_SESSIONS = 1
+MAX_SESSIONS = 8
 
 
-def round_down(weight, increment):
-    return (weight / increment).to_integral_value(ROUND_FLOOR) * increment
+def sessions_needed(lift, weight):
+    """Sessions to complete at `weight` before adding one increment."""
+    if not weight:
+        return MIN_SESSIONS
+    sessions = math.ceil(lift.increment / (weight * lift.rate))
+    return max(MIN_SESSIONS, min(MAX_SESSIONS, sessions))
 
 
-def next_weight(weight, reps, slot, misses):
-    """Return (next weight, consecutive misses, outcome) after one session of `slot` at `weight`."""
-    increment = slot.lift.increment
-    if increment is None or weight is None:
-        return weight, 0, HOLD
-    if len(reps) >= slot.sets and all(r >= slot.high for r in reps[:slot.sets]):
-        return weight + increment, 0, UP
-    if len(reps) < slot.sets or any(r < slot.low for r in reps):
-        misses += 1
-        if misses >= MISSES_BEFORE_DELOAD:
-            # At least one full increment off, never below zero.
-            dropped = min(round_down(weight * DELOAD, increment), weight - increment)
-            return max(dropped, Decimal('0')), 0, DELOADED
-        return weight, misses, MISS
-    return weight, 0, HOLD
+def after_session(lift, weight, sessions):
+    """Count one completed session; return (weight, sessions at it, went up?)."""
+    sessions += 1
+    if sessions >= sessions_needed(lift, weight):
+        return weight + lift.increment, 0, True
+    return weight, sessions, False
 
 
 def plates_per_side(total):
@@ -46,13 +38,3 @@ def plates_per_side(total):
             plates.append(plate)
             per_side -= plate
     return plates if per_side == 0 else None
-
-
-def estimated_1rm(weight, reps):
-    """Epley estimate from the best set."""
-    if not weight or not reps:
-        return None
-    best = max(reps)
-    if best <= 0:
-        return None
-    return (weight * (1 + Decimal(best) / 30)).quantize(Decimal('1'))
