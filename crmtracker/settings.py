@@ -133,7 +133,13 @@ SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = 'DYNO' in os.environ
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# STATICFILES_STORAGE was removed in Django 5.1; STORAGES is what actually takes effect.
+# Compressed (gzip/brotli copies made at collectstatic) without the manifest, so tests and
+# runserver work without running collectstatic first.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
 
 # Email configuration
 # In development, emails are printed to the console by default.
