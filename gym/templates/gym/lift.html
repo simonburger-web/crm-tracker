@@ -46,6 +46,21 @@
 </div>
 {% endif %}
 
+{% if edits %}
+<h2 class="section-label">Your edits · {{ edits_after_increase }} after an increase</h2>
+<div class="panel">
+  {% for e in edits %}
+  <div class="row">
+    <div>
+      <div>{{ e.edit.edited_at|date:"j M Y" }}</div>
+      <div class="sub">{% if e.edit.after_increase %}After an automatic increase{% else %}After an earlier edit{% endif %} · {{ e.edit.sessions_at_weight }}/{{ e.edit.sessions_needed }} sessions done</div>
+    </div>
+    <div class="kg" style="font-size:18px">{{ e.old }} → {{ e.new }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <h2 class="section-label">History</h2>
 {% if rows %}
 <div class="panel">

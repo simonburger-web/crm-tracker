@@ -45,3 +45,22 @@ class LiftLog(models.Model):
 
     class Meta:
         ordering = ['workout__completed_at', 'pk']
+
+
+class WeightEdit(models.Model):
+    """A manual override on the edit-weights page: the data for tuning each lift's overload rate later."""
+    slug = models.SlugField(max_length=50, db_index=True)
+    edited_at = models.DateTimeField(auto_now_add=True)
+    old_weight = models.DecimalField(max_digits=6, decimal_places=2)
+    new_weight = models.DecimalField(max_digits=6, decimal_places=2)
+    # The weight being replaced was set by an automatic increase (not by an earlier manual edit).
+    after_increase = models.BooleanField(default=False)
+    sessions_at_weight = models.PositiveSmallIntegerField(default=0)  # completed at old_weight before the edit
+    sessions_needed = models.PositiveSmallIntegerField(default=0)     # calculator's target at old_weight
+
+    class Meta:
+        ordering = ['-edited_at', '-pk']
+
+    @property
+    def change(self):
+        return self.new_weight - self.old_weight

@@ -32,7 +32,7 @@
 {% block content %}
 <div class="head">
   <h1>Working weights</h1>
-  <p>Only change these if a weight is too easy or too heavy. A changed weight restarts its count towards the next automatic increase.</p>
+  <p>Only change these if a weight is too easy or too heavy. A changed weight restarts its count towards the next automatic increase, and every change is logged so the overload rate can be tuned to you later.</p>
 </div>
 
 <form method="post">
@@ -41,7 +41,7 @@
     {% for r in rows %}
     <div class="row">
       <div class="name">{{ r.lift.name }}</div>
-      <div class="sub">{{ r.lift.equipment_label }} · jumps of {{ r.increment }} kg{% if r.set %} · {{ r.done }}/{{ r.needed }} sessions done{% endif %}</div>
+      <div class="sub">{{ r.lift.equipment_label }} · jumps of {{ r.increment }} kg{% if r.set %} · {{ r.done }}/{{ r.needed }} sessions done{% endif %}{% if r.edits_after_increase %} · <span style="color:var(--amber)">edited {{ r.edits_after_increase }}× after an increase</span>{% endif %}</div>
       <div class="weight">
         <button type="button" class="step" data-step="-{{ r.increment }}" aria-label="Less weight">−</button>
         <label>

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import LiftLog, LiftState, Workout
+from .models import LiftLog, LiftState, WeightEdit, Workout
 from .programme import LIFTS
 from .progression import after_session, plates_per_side, sessions_needed
 
@@ -80,3 +80,17 @@ class GymViewTests(TestCase):
         self.assertEqual((self.state('ohp').weight, self.state('ohp').sessions), (D('50'), 3))  # unchanged
         self.assertEqual(self.state('deadlift').weight, D('140'))
         self.assertFalse(LiftState.objects.filter(slug='rdl').exists())
+
+    def test_edits_are_logged_and_flag_whether_the_app_had_just_raised_the_weight(self):
+        LiftState.objects.create(slug='bench', weight=D('80'), sessions=2)
+        self.complete('day1')                                    # app raises bench to 85
+        self.complete('day1')                                    # one session at 85
+        self.client.post(reverse('gym:weights'), {'w-bench': '80', 'w-deadlift': '140'})
+        self.client.post(reverse('gym:weights'), {'w-bench': '82.5'})
+
+        second, first = WeightEdit.objects.filter(slug='bench')
+        self.assertEqual((first.old_weight, first.new_weight, first.after_increase), (D('85'), D('80'), True))
+        self.assertEqual((first.sessions_at_weight, first.sessions_needed), (1, 3))
+        self.assertEqual((second.old_weight, second.new_weight, second.after_increase), (D('80'), D('82.5'), False))
+        self.assertFalse(WeightEdit.objects.filter(slug='deadlift').exists())  # first-time set, not an edit
+        self.assertContains(self.client.get(reverse('gym:lift', args=['bench'])), '1 after an increase')

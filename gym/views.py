@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import LiftLog, LiftState, Workout
+from .models import LiftLog, LiftState, WeightEdit, Workout
 from .programme import DAYS, DAYS_BY_SLUG, KINDS, LIFTS
 from .progression import after_session, plates_per_side, sessions_needed
 
@@ -154,6 +154,14 @@ def weights(request):
                 state = states.get(lift.slug) or LiftState(slug=lift.slug)
                 if new is None or new == state.weight:
                     continue
+                if state.weight is not None:
+                    last_up = LiftLog.objects.filter(slug=lift.slug, outcome='up').order_by('-workout__completed_at').first()
+                    last_edit = WeightEdit.objects.filter(slug=lift.slug).first()
+                    WeightEdit.objects.create(
+                        slug=lift.slug, old_weight=state.weight, new_weight=new,
+                        after_increase=bool(last_up and (not last_edit or last_up.workout.completed_at > last_edit.edited_at)),
+                        sessions_at_weight=state.sessions, sessions_needed=sessions_needed(lift, state.weight),
+                    )
                 state.weight, state.sessions = new, 0
                 state.save()
                 changed.append(f'{lift.name} {_fmt(new)} kg')
@@ -161,7 +169,11 @@ def weights(request):
             messages.success(request, 'Working weights updated: ' + '; '.join(changed) + '.')
         return redirect('gym:home')
 
-    rows = [_progress(lift, states.get(lift.slug)) for lift in LIFTS.values()]
+    edits = {}
+    for slug, after_increase in WeightEdit.objects.values_list('slug', 'after_increase'):
+        edits[slug] = edits.get(slug, 0) + after_increase
+    rows = [{**_progress(lift, states.get(lift.slug)), 'edits_after_increase': edits.get(lift.slug, 0)}
+            for lift in LIFTS.values()]
     return render(request, 'gym/weights.html', {'rows': rows})
 
 
@@ -205,8 +217,11 @@ def lift(request, slug):
                  'lo': _fmt(lo), 'hi': _fmt(hi)}
 
     rows = [{'log': log, 'weight': _fmt(log.weight), 'next': _fmt(log.next_weight)} for log in reversed(logs)]
+    edits = [{'edit': e, 'old': _fmt(e.old_weight), 'new': _fmt(e.new_weight)}
+             for e in WeightEdit.objects.filter(slug=slug)]
     return render(request, 'gym/lift.html', {
-        'lift': lift_def, 'progress': _progress(lift_def, state), 'rows': rows, 'chart': chart,
+        'lift': lift_def, 'progress': _progress(lift_def, state), 'rows': rows, 'chart': chart, 'edits': edits,
+        'edits_after_increase': sum(e['edit'].after_increase for e in edits),
         'kind_label': KINDS[lift_def.kind]['label'],
     })
 
