@@ -1,6 +1,7 @@
 """The training programme, defined in code: four days of single-station pairs, ~60 min each.
 
-A lift's working weight is shared wherever it appears (e.g. cable lateral raise on days 1 and 3).
+A lift's working weight is shared wherever it appears (e.g. lat pulldown and cable lateral raise
+on days 1 and 3).
 """
 from dataclasses import dataclass
 from decimal import Decimal
@@ -71,7 +72,6 @@ def _lifts(*rows):
 
 LIFTS = _lifts(
     ('bench', 'Bench press', 'barbell', 'main'),
-    ('heavy_lat_pulldown', 'Heavy lat pulldown', 'stack', 'compound'),  # own weight: 6–8 reps vs 10–12 on day 3
     ('incline_db_press', 'Incline DB press', 'dumbbell', 'compound'),
     ('incline_db_row', 'Incline DB row', 'dumbbell', 'compound'),
     ('cable_lateral_raise', 'Cable lateral raise', 'stack', 'isolation'),
@@ -109,7 +109,7 @@ class Day:
 DAYS = [
     Day('day1', 'Day 1', 'Upper — Bench', (
         _s('bench', 4, 5, 6, '3 min', 180),
-        _s('heavy_lat_pulldown', 3, 6, 8, '2 min', 120),
+        _s('lat_pulldown', 3, 6, 8, '2 min', 120),
         _s('incline_db_press', 3, 8, 12, group='A1'),
         _s('incline_db_row', 3, 8, 12, '75 s after pair', 75, 'A2'),
         _s('cable_lateral_raise', 4, 12, 15, group='B1'),
