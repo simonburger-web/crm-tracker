@@ -78,7 +78,7 @@
     <div class="weight">
       <button type="button" class="step" data-step="-{{ c.increment }}" aria-label="Less weight">−</button>
       <label>
-        <input type="text" inputmode="decimal" name="w-{{ c.lift.slug }}" value="{{ c.weight }}" placeholder="kg" autocomplete="off"
+        <input type="text" inputmode="decimal" name="w-{{ c.lift.slug }}" value="{{ c.weight }}" placeholder="0" autocomplete="off"
                data-plates="{% if c.lift.equipment == 'barbell' %}1{% endif %}">
         <span class="unit">kg</span>
       </label>
@@ -123,7 +123,7 @@
 {% block script %}
 <script>
 (function () {
-  const BAR = 20, PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
+  const BAR = 20, PLATES = [20, 10, 5, 2.5];
 
   function fmt(n) { return String(Math.round(n * 100) / 100); }
 

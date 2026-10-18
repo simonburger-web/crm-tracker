@@ -52,7 +52,7 @@
   {% for r in rows %}
   <div class="row">
     <div>
-      <div>{{ r.day|upper }} · {{ r.log.workout.completed_at|date:"j M Y" }}</div>
+      <div>{{ r.log.workout.label }} · {{ r.log.workout.completed_at|date:"j M Y" }}</div>
       <div class="sub">Reps {{ r.reps }}</div>
     </div>
     <div>

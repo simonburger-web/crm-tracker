@@ -1,5 +1,7 @@
 from django.db import models
 
+from .programme import DAYS_BY_SLUG
+
 
 class LiftState(models.Model):
     """The working weight to load next time for one lift (slug from programme.LIFTS)."""
@@ -22,6 +24,10 @@ class Workout(models.Model):
 
     def __str__(self):
         return f'{self.day} {self.completed_at:%Y-%m-%d}'
+
+    @property
+    def label(self):
+        return DAYS_BY_SLUG[self.day].short if self.day in DAYS_BY_SLUG else self.day
 
 
 class LiftLog(models.Model):

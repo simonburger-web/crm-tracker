@@ -11,12 +11,12 @@ EQUIPMENT = {
     'dumbbell': {'label': 'Dumbbells (per hand)', 'increment': Decimal('2')},
     'stack': {'label': 'Weight stack', 'increment': Decimal('2.5')},
     'plates': {'label': 'Plate-loaded', 'increment': Decimal('5')},     # 2.5 kg a side
-    'belt': {'label': 'Added on belt', 'increment': Decimal('2.5')},    # smallest plate on a dip belt
     'time': {'label': 'Timed hold', 'increment': None},
 }
 
 BAR_KG = Decimal('20')
-PLATES_KG = [Decimal(p) for p in ('25', '20', '15', '10', '5', '2.5', '1.25')]
+# What the gym actually has: no 25s, nothing under 2.5.
+PLATES_KG = [Decimal(p) for p in ('20', '10', '5', '2.5')]
 
 
 @dataclass(frozen=True)
@@ -63,7 +63,7 @@ def _lifts(*rows):
 
 LIFTS = _lifts(
     ('bench', 'Bench press', 'barbell'),
-    ('weighted_pullup', 'Weighted pull-up', 'belt'),
+    ('heavy_lat_pulldown', 'Heavy lat pulldown', 'stack'),  # own weight: 6–8 reps vs 10–12 on day 3
     ('incline_db_press', 'Incline DB press', 'dumbbell'),
     ('incline_db_row', 'Incline DB row', 'dumbbell'),
     ('cable_lateral_raise', 'Cable lateral raise', 'stack'),
@@ -95,22 +95,21 @@ def _s(slug, sets, low, high, rest='', rest_seconds=0, group='', per_leg=False):
 @dataclass(frozen=True)
 class Day:
     slug: str
-    weekday: int        # Monday = 0
     short: str
     title: str
     slots: tuple
 
 
 DAYS = [
-    Day('mon', 0, 'Mon', 'Upper — Bench', (
+    Day('day1', 'Day 1', 'Upper — Bench', (
         _s('bench', 4, 5, 6, '3 min', 180),
-        _s('weighted_pullup', 3, 6, 8, '2 min', 120),
+        _s('heavy_lat_pulldown', 3, 6, 8, '2 min', 120),
         _s('incline_db_press', 3, 8, 12, group='A1'),
         _s('incline_db_row', 3, 8, 12, '75 s after pair', 75, 'A2'),
         _s('cable_lateral_raise', 4, 12, 15, group='B1'),
         _s('rope_pushdown', 4, 12, 15, '45 s after pair', 45, 'B2'),
     )),
-    Day('tue', 1, 'Tue', 'Lower — Squat', (
+    Day('day2', 'Day 2', 'Lower — Squat', (
         _s('back_squat', 4, 5, 6, '3 min', 180),
         _s('rdl', 3, 8, 8, '2 min', 120),
         _s('leg_press', 3, 10, 12, group='A1'),
@@ -118,7 +117,7 @@ DAYS = [
         _s('lying_leg_curl', 3, 10, 12, group='B1'),
         _s('plank', 3, 45, 45, '45 s after pair', 45, 'B2'),
     )),
-    Day('thu', 3, 'Thu', 'Upper — Shoulders & Back', (
+    Day('day3', 'Day 3', 'Upper — Shoulders & Back', (
         _s('ohp', 4, 6, 8, '2.5 min', 150),
         _s('lat_pulldown', 3, 10, 12, '75 s', 75),
         _s('seated_cable_row', 3, 10, 12, '75 s', 75),
@@ -127,7 +126,7 @@ DAYS = [
         _s('db_curl', 3, 10, 12, group='C1'),
         _s('db_oh_triceps', 3, 10, 12, '45 s after pair', 45, 'C2'),
     )),
-    Day('fri', 4, 'Fri', 'Lower — Deadlift', (
+    Day('day4', 'Day 4', 'Lower — Deadlift', (
         _s('deadlift', 3, 5, 5, '3 min', 180),
         _s('front_squat', 3, 8, 8, '2 min', 120),
         _s('bulgarian_split_squat', 3, 8, 10, group='A1', per_leg=True),

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* In the components layer so utilities on the element (w-48, hidden, py-1.5) still win. */
+@layer base {
+  body { font-feature-settings: "tnum" 1; -webkit-font-smoothing: antialiased; }
+}
+@layer components {
+  .form-input {
+    @apply block w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-600;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-indigo-700 bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-red-700 bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none;
+  }
+  .nav-section { @apply px-3 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500; }
+  .nav-link { @apply relative flex items-center gap-2.5 rounded px-3 py-1.5 text-[13px] font-medium text-gray-300 hover:bg-white/5 hover:text-white; }
+  .nav-link svg { @apply h-4 w-4 flex-shrink-0 text-gray-500; }
+  .nav-link.active { @apply bg-white/10 text-white; }
+  .nav-link.active::before { content: ""; @apply absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-indigo-400; }
+  .nav-link.active svg { @apply text-indigo-300; }
+}

@@ -40,10 +40,9 @@ def _last_logs():
 
 
 def _next_day(last_workout):
-    """The day after the last one completed, rotating Mon → Tue → Thu → Fri."""
+    """The day after the last one completed, rotating Day 1 → 2 → 3 → 4."""
     if last_workout is None:
-        today = timezone.localdate().weekday()
-        return next((d for d in DAYS if d.weekday >= today), DAYS[0])
+        return DAYS[0]
     idx = next((i for i, d in enumerate(DAYS) if d.slug == last_workout.day), -1)
     return DAYS[(idx + 1) % len(DAYS)]
 
@@ -191,7 +190,7 @@ def undo_last(request):
                 continue
             LiftState.objects.update_or_create(
                 slug=log.slug, defaults={'weight': log.prev_weight, 'misses': log.prev_misses})
-        label = DAYS_BY_SLUG[workout.day].short if workout.day in DAYS_BY_SLUG else workout.day
+        label = workout.label
         workout.delete()
     messages.success(request, f'Undid the last {label} session.')
     return redirect('gym:home')
@@ -224,7 +223,6 @@ def lift(request, slug):
     rows = [{
         'log': log, 'weight': _fmt(log.weight), 'next': _fmt(log.next_weight),
         'reps': ' · '.join(str(r) for r in log.reps),
-        'day': DAYS_BY_SLUG[log.workout.day].short if log.workout.day in DAYS_BY_SLUG else log.workout.day,
     } for log in reversed(logs)]
     best = max((estimated_1rm(log.weight, log.reps) or 0 for log in logs), default=0)
     return render(request, 'gym/lift.html', {
