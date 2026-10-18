@@ -1,0 +1,87 @@
+{% extends 'gym/base.html' %}
+
+{% block style %}
+  .hero { margin-top: 18px; padding: 20px; border-radius: 20px; background: linear-gradient(140deg, #1d2414 0%, #12140f 70%); border: 1px solid #34401f; }
+  .hero .kicker { font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--lime); }
+  .hero h1 { font-size: 40px; line-height: 1; font-weight: 800; margin: 6px 0 4px; }
+  .hero p { margin: 0 0 18px; color: var(--muted); }
+  .stats { display: flex; gap: 10px; margin-top: 12px; }
+  .stat { flex: 1; min-width: 0; padding: 12px 14px; }
+  .stat b { display: block; font: 800 28px/1 "Barlow Condensed", sans-serif; }
+  .stat span { font-size: 13px; color: var(--muted); }
+
+  .days { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .day { display: block; padding: 14px; min-height: 96px; }
+  .day.next { border-color: var(--lime); }
+  .day .d { font: 800 26px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+  .day .t { margin-top: 4px; font-size: 14px; font-weight: 500; }
+  .day .when { margin-top: 6px; font-size: 13px; color: var(--muted); }
+
+  .list a, .list div.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border-top: 1px solid var(--line); min-height: 52px; }
+  .list > :first-child { border-top: 0; }
+  .list .name { font-weight: 500; }
+  .list .sub { font-size: 13px; color: var(--muted); }
+  .list .kg { font: 800 22px/1 "Barlow Condensed", sans-serif; white-space: nowrap; }
+  .list .kg small { font-size: 14px; color: var(--muted); font-weight: 600; margin-left: 2px; }
+  .undo { background: none; border: 0; color: var(--red); font: 600 14px Barlow, sans-serif; padding: 8px 0 8px 12px; }
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="kicker">Up next</div>
+  <h1>{{ up_next.short }} · {{ up_next.title }}</h1>
+  <p>{{ up_next.slots|length }} exercises · ~60 min</p>
+  <a href="{% url 'gym:day' up_next.slug %}" class="btn">Start {{ up_next.short }}</a>
+</section>
+
+<div class="stats">
+  <div class="panel stat"><b>{{ week_count }}</b><span>sessions, last 7 days</span></div>
+  <div class="panel stat"><b>{{ total_count }}</b><span>sessions total</span></div>
+</div>
+
+<h2 class="section-label">Programme</h2>
+<div class="days">
+  {% for d in days %}
+  <a href="{% url 'gym:day' d.day.slug %}" class="panel day{% if d.is_next %} next{% endif %}">
+    <div class="d{% if d.is_next %} lime{% endif %}">{{ d.day.short }}</div>
+    <div class="t">{{ d.day.title }}</div>
+    <div class="when">{% if d.last %}Done {{ d.last|date:"D j M" }}{% else %}Not done yet{% endif %}</div>
+  </a>
+  {% endfor %}
+</div>
+
+<h2 class="section-label">Working weights</h2>
+<div class="panel list">
+  {% for row in lifts %}
+  <a href="{% url 'gym:lift' row.lift.slug %}">
+    <div>
+      <div class="name">{{ row.lift.name }}</div>
+      <div class="sub">{{ row.lift.equipment_label }}{% if row.e1rm %} · e1RM {{ row.e1rm }} kg{% endif %}</div>
+    </div>
+    <div style="text-align:right">
+      {% if row.weight %}<div class="kg">{{ row.weight }}<small>kg</small></div>{% else %}<div class="sub">Not set</div>{% endif %}
+      {% if row.outcome == 'up' %}<span class="tag up">↑ Weight up</span>{% elif row.outcome == 'deload' %}<span class="tag deload">Deload</span>{% elif row.outcome == 'miss' %}<span class="tag miss">Missed</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% if workouts %}
+<h2 class="section-label">Recent sessions</h2>
+<div class="panel list">
+  {% for w in workouts %}
+  <div class="row">
+    <div>
+      <div class="name">{{ w.day|upper }} · {{ w.completed_at|date:"D j M, H:i" }}</div>
+      <div class="sub">{{ w.logs.all|length }} exercises logged</div>
+    </div>
+    {% if forloop.first %}
+    <form method="post" action="{% url 'gym:undo' %}" onsubmit="return confirm('Undo this session and put the weights back?')">
+      {% csrf_token %}<button class="undo">Undo</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
