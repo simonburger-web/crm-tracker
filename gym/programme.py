@@ -118,8 +118,8 @@ DAYS = [
     Day('day2', 'Day 2', 'Lower — Squat', (
         _s('back_squat', 4, 5, 6, '3 min', 180),
         _s('rdl', 3, 8, 8, '2 min', 120),
-        _s('leg_press', 3, 10, 12, group='A1'),
-        _s('standing_calf_raise', 3, 12, 15, '75 s after pair', 75, 'A2'),
+        _s('leg_press', 3, 10, 12, '75 s', 75),
+        _s('standing_calf_raise', 3, 12, 15, '75 s', 75),
         _s('standing_leg_curl', 3, 10, 12, '45 s', 45),
     )),
     Day('day3', 'Day 3', 'Upper — Shoulders & Back', (
