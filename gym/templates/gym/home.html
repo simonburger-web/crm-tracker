@@ -34,10 +34,17 @@
 
 {% block content %}
 <section class="hero">
+  {% if session_day %}
+  <div class="kicker">In progress</div>
+  <h1>{{ session_day.short }} · {{ session_day.title }}</h1>
+  <p>Counts by itself at {{ session.counts_at|date:"H:i" }}</p>
+  <a href="{% url 'gym:day' session_day.slug %}" class="btn">Back to {{ session_day.short }}</a>
+  {% else %}
   <div class="kicker">Up next</div>
   <h1>{{ up_next.short }} · {{ up_next.title }}</h1>
   <p>{{ up_next.slots|length }} exercises · ~60 min</p>
-  <a href="{% url 'gym:day' up_next.slug %}" class="btn">Start {{ up_next.short }}</a>
+  <a href="{% url 'gym:day' up_next.slug %}" class="btn">Open {{ up_next.short }}</a>
+  {% endif %}
 </section>
 
 <div class="stats">
@@ -51,7 +58,7 @@
   <a href="{% url 'gym:day' d.day.slug %}" class="panel day{% if d.is_next %} next{% endif %}">
     <div class="d{% if d.is_next %} lime{% endif %}">{{ d.day.short }}</div>
     <div class="t">{{ d.day.title }}</div>
-    <div class="when">{% if d.last %}Done {{ d.last|date:"D j M" }}{% else %}Not done yet{% endif %}</div>
+    <div class="when">{% if d.day == session_day %}<span class="lime">In progress</span>{% elif d.last %}Done {{ d.last|date:"D j M" }}{% else %}Not done yet{% endif %}</div>
   </a>
   {% endfor %}
 </div>

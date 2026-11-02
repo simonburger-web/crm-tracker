@@ -1,6 +1,12 @@
+from datetime import timedelta
+
 from django.db import models
 
 from .programme import DAYS_BY_SLUG
+
+# How long after Start a session counts as done. Counting raises the locked weights, so this has to outlast
+# a real workout (~60 min) or the weights would change on screen mid-session.
+AUTO_COMPLETE = timedelta(minutes=90)
 
 
 class LiftState(models.Model):
@@ -13,6 +19,24 @@ class LiftState(models.Model):
 
     def __str__(self):
         return f'{self.slug}: {self.weight}'
+
+
+class ActiveSession(models.Model):
+    """A started programme day that hasn't counted yet. Becomes a Workout once AUTO_COMPLETE has passed."""
+    day = models.SlugField(max_length=10)
+    started_at = models.DateTimeField()
+    # First-time weights entered during the session ({lift slug: '80'}); they lock in when it counts.
+    pending_weights = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-started_at', '-pk']
+
+    def __str__(self):
+        return f'{self.day} started {self.started_at:%Y-%m-%d %H:%M}'
+
+    @property
+    def counts_at(self):
+        return self.started_at + AUTO_COMPLETE
 
 
 class Workout(models.Model):

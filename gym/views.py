@@ -4,14 +4,14 @@ from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.db import transaction
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import LiftLog, LiftState, WeightEdit, Workout
+from .models import AUTO_COMPLETE, ActiveSession, LiftLog, LiftState, WeightEdit, Workout
 from .programme import DAYS, DAYS_BY_SLUG, KINDS, LIFTS
 from .progression import after_session, plates_per_side, sessions_needed
 
@@ -19,9 +19,12 @@ from .progression import after_session, plates_per_side, sessions_needed
 GYM_TZ = ZoneInfo('Africa/Johannesburg')
 
 
-def _activate_tz(view):
+def _gym_view(view):
+    """Runs a view on the gym clock, after counting any session whose time is up. There's no background
+    worker, so sessions are counted by whichever gym page opens next."""
     def wrapper(request, *args, **kwargs):
         with timezone.override(GYM_TZ):
+            _count_finished_sessions(request)
             return view(request, *args, **kwargs)
     wrapper.__name__ = view.__name__
     return wrapper
@@ -72,11 +75,12 @@ def _progress(lift, state):
     }
 
 
-@_activate_tz
+@_gym_view
 def home(request):
     workouts = list(Workout.objects.prefetch_related('logs')[:12])
     last_workout = workouts[0] if workouts else None
     up_next = _next_day(last_workout)
+    session = ActiveSession.objects.first()
     last_by_day = {}
     for slug, completed_at in Workout.objects.values_list('day', 'completed_at'):
         last_by_day.setdefault(slug, completed_at)
@@ -86,63 +90,118 @@ def home(request):
     days = [{'day': d, 'last': last_by_day.get(d.slug), 'is_next': d == up_next} for d in DAYS]
     return render(request, 'gym/home.html', {
         'days': days, 'up_next': up_next, 'lifts': lifts, 'workouts': workouts,
+        'session': session, 'session_day': DAYS_BY_SLUG.get(session.day) if session else None,
         'unset_count': sum(not row['set'] for row in lifts),
         'week_count': Workout.objects.filter(completed_at__gte=timezone.now() - timedelta(days=7)).count(),
         'total_count': Workout.objects.count(),
     })
 
 
-@_activate_tz
+@_gym_view
 def day(request, day):
     programme_day = DAYS_BY_SLUG.get(day)
     if programme_day is None:
         raise Http404
 
     if request.method == 'POST':
-        return _complete_day(request, programme_day)
+        return _start_day(request, programme_day)
 
+    session = ActiveSession.objects.first()
+    here = session is not None and session.day == programme_day.slug
+    pending = session.pending_weights if here else {}
     states = _states()
-    cards = [{'slot': slot, **_progress(slot.lift, states.get(slot.lift.slug))} for slot in programme_day.slots]
+    cards = [{'slot': slot, 'pending': pending.get(slot.lift.slug, ''), **_progress(slot.lift, states.get(slot.lift.slug))}
+             for slot in programme_day.slots]
     last_done = Workout.objects.filter(day=programme_day.slug).first()
     return render(request, 'gym/day.html', {
         'day': programme_day, 'cards': cards, 'last_done': last_done, 'days': DAYS,
         'any_unset': any(not c['set'] for c in cards),
+        'session': session if here else None,
+        'other_session_day': DAYS_BY_SLUG.get(session.day) if session and not here else None,
+        'auto_minutes': int(AUTO_COMPLETE.total_seconds() // 60),
     })
 
 
-def _complete_day(request, programme_day):
+def _start_day(request, programme_day):
+    """Start this day, replacing any other day in progress, and keep the first-time weights posted with it.
+    An autosave only ever updates this day's running session: a page left open must not start a new one."""
+    autosave = 'autosave' in request.POST
     with transaction.atomic():
-        states = {s.slug: s for s in LiftState.objects.select_for_update()}
-        workout = Workout.objects.create(day=programme_day.slug, completed_at=timezone.now())
-        ups = []
+        session = ActiveSession.objects.select_for_update().first()
+        if session is not None and session.day != programme_day.slug:
+            if not autosave:
+                session.delete()
+            session = None
+        if session is None:
+            if autosave:
+                return HttpResponse(status=204)
+            session = ActiveSession(day=programme_day.slug, started_at=timezone.now())
         for slot in programme_day.slots:
-            lift = slot.lift
-            state = states.get(lift.slug) or LiftState(slug=lift.slug)
-            prev_weight, prev_sessions = state.weight, state.sessions
+            raw = request.POST.get(f'w-{slot.lift.slug}')
+            if raw is None:
+                continue
+            value = _parse_weight(raw)
+            if value is None:
+                session.pending_weights.pop(slot.lift.slug, None)
+            else:
+                session.pending_weights[slot.lift.slug] = str(value)
+        session.save()
+    if autosave:
+        return HttpResponse(status=204)
+    return redirect('gym:day', day=programme_day.slug)
+
+
+def _count_finished_sessions(request):
+    with transaction.atomic():
+        cutoff = timezone.now() - AUTO_COMPLETE
+        for session in ActiveSession.objects.select_for_update().filter(started_at__lte=cutoff):
+            programme_day = DAYS_BY_SLUG.get(session.day)
+            if programme_day is not None:
+                _complete_day(request, programme_day, session)
+            session.delete()
+
+
+def _complete_day(request, programme_day, session):
+    # Dated by when the session ran, however much later the app was next opened.
+    workout = Workout.objects.create(day=programme_day.slug, completed_at=session.counts_at)
+    states = {s.slug: s for s in LiftState.objects.select_for_update()}
+    ups = []
+    for slot in programme_day.slots:
+        lift = slot.lift
+        state = states.get(lift.slug) or LiftState(slug=lift.slug)
+        prev_weight, prev_sessions = state.weight, state.sessions
+        if state.weight is None:
+            # First time: lock in the weight entered on the day page.
+            state.weight, state.sessions = _parse_weight(session.pending_weights.get(lift.slug)), 0
             if state.weight is None:
-                # First time: lock in the weight entered on the day page.
-                state.weight, state.sessions = _parse_weight(request.POST.get(f'w-{lift.slug}')), 0
-                if state.weight is None:
-                    continue
-            weight = state.weight
-            state.weight, state.sessions, went_up = after_session(lift, weight, state.sessions)
-            state.save()
-            states[lift.slug] = state
-            LiftLog.objects.create(
-                workout=workout, slug=lift.slug, weight=weight, outcome='up' if went_up else 'hold',
-                next_weight=state.weight, prev_weight=prev_weight, prev_sessions=prev_sessions,
-            )
-            if went_up:
-                ups.append(f'{lift.name} {_fmt(weight)} → {_fmt(state.weight)} kg')
+                continue
+        weight = state.weight
+        state.weight, state.sessions, went_up = after_session(lift, weight, state.sessions)
+        state.save()
+        states[lift.slug] = state
+        LiftLog.objects.create(
+            workout=workout, slug=lift.slug, weight=weight, outcome='up' if went_up else 'hold',
+            next_weight=state.weight, prev_weight=prev_weight, prev_sessions=prev_sessions,
+        )
+        if went_up:
+            ups.append(f'{lift.name} {_fmt(weight)} → {_fmt(state.weight)} kg')
 
     if ups:
-        messages.success(request, f'{programme_day.short} done. Weight goes up: ' + '; '.join(ups) + '.')
+        messages.success(request, f'{programme_day.short} counted. Weight goes up: ' + '; '.join(ups) + '.')
     else:
-        messages.success(request, f'{programme_day.short} done. Same weights next time.')
+        messages.success(request, f'{programme_day.short} counted. Same weights next time.')
+
+
+@require_POST
+@_gym_view
+def cancel_session(request):
+    """Drop the session in progress without counting it, e.g. after tapping Start by accident."""
+    ActiveSession.objects.all().delete()
+    messages.success(request, 'Session cancelled. Nothing was counted.')
     return redirect('gym:home')
 
 
-@_activate_tz
+@_gym_view
 def weights(request):
     """Manual override for the locked working weights; changing one restarts its session count."""
     states = _states()
@@ -178,6 +237,7 @@ def weights(request):
 
 
 @require_POST
+@_gym_view
 def undo_last(request):
     """Undo the most recent workout and put every lift back where it was."""
     with transaction.atomic():
@@ -193,7 +253,7 @@ def undo_last(request):
     return redirect('gym:home')
 
 
-@_activate_tz
+@_gym_view
 def lift(request, slug):
     lift_def = LIFTS.get(slug)
     if lift_def is None:

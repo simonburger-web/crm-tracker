@@ -55,6 +55,10 @@
 
   .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 12px 16px calc(12px + var(--safe-bottom)); background: linear-gradient(to top, var(--bg) 70%, rgba(11,12,10,0)); }
   .dock .btn { max-width: 528px; margin: 0 auto; box-shadow: 0 8px 30px rgba(198,255,61,.18); }
+  .live { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 528px; min-height: 56px; margin: 0 auto; padding: 8px 8px 8px 16px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--lime); }
+  .live b { display: block; color: var(--lime); font: 800 20px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+  .live span { font-size: 13px; color: var(--muted); }
+  .live button { flex: none; min-height: 44px; padding: 0 12px; border: 0; background: none; color: var(--red); font: 600 14px Barlow, sans-serif; }
 {% endblock %}
 
 {% block content %}
@@ -64,7 +68,7 @@
 
 <div class="head">
   <h1>{{ day.title }}</h1>
-  <p>{% if last_done %}Last done {{ last_done.completed_at|date:"D j M" }}{% else %}First time on this day{% endif %} · Working weights are locked — just lift, then tap Complete.</p>
+  <p>{% if last_done %}Last done {{ last_done.completed_at|date:"D j M" }}{% else %}First time on this day{% endif %} · Working weights are locked — tap Start and just lift. It counts by itself after {{ auto_minutes }} min.</p>
 </div>
 
 <form method="post" id="day-form">
@@ -87,7 +91,7 @@
     {% if c.plates is not None %}<div class="plates">{% if c.plates %}Each side: {% for p in c.plates %}<span class="plate">{{ p }}</span>{% endfor %}{% else %}Empty bar{% endif %}</div>{% endif %}
     <div class="progress" aria-hidden="true">{% for on in c.dots %}<i class="{% if on %}on{% elif forloop.counter0 == c.done %}today{% endif %}"></i>{% endfor %}</div>
     {% if c.left == 1 %}
-    <div class="up-today">↑ Complete today and it goes up to {{ c.next_weight }} kg</div>
+    <div class="up-today">↑ Goes up to {{ c.next_weight }} kg after this session</div>
     {% else %}
     <div class="hint">Session {{ c.done|add:1 }} of {{ c.needed }} at this weight · <b>{{ c.next_weight }} kg</b> after session {{ c.needed }}</div>
     {% endif %}
@@ -95,14 +99,14 @@
     <div class="weight">
       <button type="button" class="step" data-step="-{{ c.increment }}" aria-label="Less weight">−</button>
       <label>
-        <input type="text" inputmode="decimal" name="w-{{ c.lift.slug }}" value="" placeholder="0" autocomplete="off"
+        <input type="text" inputmode="decimal" name="w-{{ c.lift.slug }}" value="{{ c.pending }}" placeholder="0" autocomplete="off"
                data-plates="{% if c.lift.equipment == 'barbell' %}1{% endif %}">
         <span class="unit">kg</span>
       </label>
       <button type="button" class="step" data-step="{{ c.increment }}" aria-label="More weight">+</button>
     </div>
     {% if c.lift.equipment == 'barbell' %}<div class="plates" data-plates-out></div>{% endif %}
-    <div class="hint">Starting weight for {{ c.slot.high }} clean reps. It locks in when you complete the day.</div>
+    <div class="hint">Starting weight for {{ c.slot.high }} clean reps. It locks in when the session counts.</div>
     {% endif %}
 
     {% if c.slot.rest_seconds %}
@@ -112,9 +116,21 @@
   {% endfor %}
 
   <div class="dock">
-    <button type="submit" class="btn" id="complete">✓ Complete {{ day.short }}</button>
+    {% if session %}
+    <div class="live">
+      <div><b>{{ day.short }} in progress</b><span>Counts by itself at {{ session.counts_at|date:"H:i" }}</span></div>
+      <button type="submit" form="cancel-form">Cancel</button>
+    </div>
+    {% elif other_session_day %}
+    <button type="submit" class="btn" data-confirm="Stop {{ other_session_day.short }} without counting it and start {{ day.short }}?">Switch to {{ day.short }}</button>
+    {% else %}
+    <button type="submit" class="btn">Start {{ day.short }}</button>
+    {% endif %}
   </div>
 </form>
+{% if session %}
+<form method="post" action="{% url 'gym:cancel' %}" id="cancel-form" onsubmit="return confirm('Cancel this session? It won\'t count.')">{% csrf_token %}</form>
+{% endif %}
 {% endblock %}
 
 {% block script %}
@@ -170,9 +186,26 @@
     });
   });
 
-  document.getElementById('day-form').addEventListener('submit', e => {
-    if (!confirm('Complete {{ day.short }}?')) e.preventDefault();
+  const form = document.getElementById('day-form');
+  form.addEventListener('submit', e => {
+    const message = e.submitter && e.submitter.dataset.confirm;
+    if (message && !confirm(message)) e.preventDefault();
   });
+
+  {% if session %}
+  // No Complete button to send them with any more, so first-time weights save as they're entered.
+  let saveTimer = null;
+  function saveWeights() {
+    clearTimeout(saveTimer);
+    const data = new FormData(form);
+    data.append('autosave', '1');
+    fetch(location.href, { method: 'POST', body: data, keepalive: true });
+  }
+  document.querySelectorAll('.weight input').forEach(i => {
+    i.addEventListener('input', () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveWeights, 500); });
+  });
+  form.addEventListener('submit', e => { e.preventDefault(); saveWeights(); });
+  {% endif %}
 })();
 </script>
 {% endblock %}

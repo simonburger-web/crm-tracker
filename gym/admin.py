@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LiftLog, LiftState, WeightEdit, Workout
+from .models import ActiveSession, LiftLog, LiftState, WeightEdit, Workout
 
 
 class LiftLogInline(admin.TabularInline):
@@ -12,6 +12,11 @@ class LiftLogInline(admin.TabularInline):
 class WorkoutAdmin(admin.ModelAdmin):
     list_display = ('day', 'completed_at')
     inlines = [LiftLogInline]
+
+
+@admin.register(ActiveSession)
+class ActiveSessionAdmin(admin.ModelAdmin):
+    list_display = ('day', 'started_at')
 
 
 @admin.register(LiftState)
