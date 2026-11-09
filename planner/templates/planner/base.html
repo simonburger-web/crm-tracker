@@ -1,0 +1,60 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17181b" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Planner">
+  <meta name="format-detection" content="telephone=no">
+  <title>{% block title %}Planner{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'planner/planner.css' %}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{% url 'planner:today' %}">Planner</a>
+      <nav class="nav">
+        <a href="{% url 'planner:today' %}" class="{% if request.resolver_match.url_name != 'routines' %}active{% endif %}">Day</a>
+        <a href="{% url 'planner:routines' %}" class="{% if request.resolver_match.url_name == 'routines' %}active{% endif %}">Routines</a>
+        <a href="{% url 'dashboard' %}">CRM →</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    {% if messages %}
+      <div class="toasts" role="status">
+        {% for m in messages %}<div class="toast {{ m.tags }}">{{ m }}</div>{% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    // Keep your scroll position across form submits (every action is a normal POST).
+    (function () {
+      var key = "scroll:" + location.pathname;
+      try {
+        var y = sessionStorage.getItem(key);
+        if (y !== null) {
+          if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+          window.scrollTo(0, parseInt(y, 10));
+          requestAnimationFrame(function () { window.scrollTo(0, parseInt(y, 10)); });
+        }
+        sessionStorage.removeItem(key);
+      } catch (e) {}
+      document.addEventListener("submit", function (e) {
+        if (e.target.dataset.keepScroll === undefined) return;
+        try { sessionStorage.setItem(key, String(window.scrollY)); } catch (err) {}
+      }, true);
+      setTimeout(function () {
+        document.querySelectorAll(".toast").forEach(function (t) { t.classList.add("hide"); });
+      }, 4000);
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

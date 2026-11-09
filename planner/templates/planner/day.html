@@ -1,0 +1,284 @@
+{% extends "planner/base.html" %}
+{% load planner_extras %}
+{% block title %}{{ plan.date|date:"D j M" }} · Planner{% endblock %}
+
+{% block content %}
+<section class="dayhead">
+  <div class="dayhead-row">
+    <a class="iconbtn" href="{% url 'planner:day' prev_day %}" aria-label="Previous day">‹</a>
+    <div class="daytitle">
+      <span class="eyebrow">{% if is_today %}Today{% elif is_tomorrow %}Tomorrow{% elif is_past %}Past day{% else %}Upcoming{% endif %}</span>
+      <h1>{{ plan.date|date:"l, j F" }}</h1>
+    </div>
+    <a class="iconbtn" href="{% url 'planner:day' next_day %}" aria-label="Next day">›</a>
+  </div>
+  <div class="daynav">
+    <a class="chip{% if is_today %} on{% endif %}" href="{% url 'planner:day' real_today %}">Today</a>
+    <a class="chip{% if is_tomorrow %} on{% endif %}" href="{% url 'planner:day' real_tomorrow %}">Tomorrow</a>
+    <form method="get" action="{% url 'planner:go' %}" class="datejump">
+      <input type="date" name="d" value="{{ plan.date|date:'Y-m-d' }}" aria-label="Jump to date" onchange="this.form.submit()">
+    </form>
+  </div>
+  {% if show_plan_tomorrow %}
+    <a class="banner" href="{% url 'planner:day' real_tomorrow %}">
+      <span>Evening mode: close out today in the <strong>shutdown</strong> at the bottom, then plan tomorrow.</span>
+      <span class="banner-cta">Plan tomorrow →</span>
+    </a>
+  {% endif %}
+</section>
+
+<section class="stats" aria-label="Day summary">
+  <div class="stat">
+    <span class="k">Must-dos</span>
+    <span class="v">{{ must_done }}<small>/{{ must_total }}</small></span>
+  </div>
+  <div class="stat">
+    <span class="k">Done</span>
+    <span class="v">{{ done }}<small>/{{ total }}</small></span>
+  </div>
+  <div class="stat load{% if cap.over %} over{% elif cap.tight %} tight{% endif %}">
+    <span class="k">Planned vs. available</span>
+    <span class="v">{{ cap.load|hm|default:"0m" }} <small>of {{ cap.window|hm }}</small></span>
+    <span class="bar"><span style="width: {{ cap.bar_pct }}%"></span></span>
+    <span class="note">
+      {% if cap.over %}Over by {{ cap.over_by|hm }}{% else %}{{ cap.free|hm }} unplanned{% endif %}{% if cap.untimed %} · plus {{ cap.untimed }} with no set length{% endif %}
+    </span>
+  </div>
+</section>
+
+<section class="card focus" id="focus">
+  <form method="post" action="{% url 'planner:update_plan' plan.date %}" data-keep-scroll>{% csrf_token %}
+    <input type="hidden" name="anchor" value="focus">
+    <label for="id_intention" class="focus-label">Today is a win if…</label>
+    <div class="inline-field">
+      <input id="id_intention" name="intention" value="{{ plan.intention }}" maxlength="200" placeholder="e.g. the Acme proposal is sent" autocomplete="off">
+      <button class="btn">Save</button>
+    </div>
+  </form>
+  <p class="frogline">
+    {% if frog %}
+      <span class="frogmark">🐸</span> First thing: <a href="#task-{{ frog.pk }}"><strong>{{ frog.title }}</strong></a>{% if frog.start_time %} at {{ frog.start_time|time:"g:i A" }}{% endif %}
+    {% else %}
+      <span class="frogmark">🐸</span> <span class="muted">Pick a frog: open your hardest must-do and tap “Do this first”.</span>
+    {% endif %}
+  </p>
+</section>
+
+<div class="grid">
+  <div class="col">
+    <section class="card" id="dump">
+      <header class="card-head">
+        <span class="step">1</span>
+        <div><h2>Brain dump</h2><p class="sub">Get everything out of your head. One task per line.</p></div>
+      </header>
+      <form method="post" action="{% url 'planner:add_tasks' plan.date %}" id="dump-form" data-keep-scroll>{% csrf_token %}
+        <textarea name="lines" rows="4" placeholder="!Send Acme proposal 90m #frog&#10;Call Sarah re renewal @2pm 15m&#10;Inbox zero 30m&#10;?Tidy CRM notes" autocapitalize="sentences"></textarea>
+        <div class="dump-foot">
+          <details class="shortcuts">
+            <summary>Shortcuts</summary>
+            <ul>
+              <li><code>!</code> at the start = must-do · <code>?</code> = could-do</li>
+              <li><code>45m</code> or <code>1.5h</code> = how long it takes</li>
+              <li><code>@9:30</code> or <code>@2pm</code> = fixed start time</li>
+              <li>No length = an <em>anytime</em> task (“Call 30 leads”). Time but no length = a checkpoint (“Out of bed @7am”).</li>
+              <li><code>#deep</code> <code>#admin</code> <code>#call</code> <code>#personal</code> = type (guessed otherwise)</li>
+              <li><code>#frog</code> = hardest thing, do it first</li>
+            </ul>
+          </details>
+          <button class="btn primary">Add tasks</button>
+        </div>
+      </form>
+    </section>
+
+    {% if carry_count %}
+      <form method="post" action="{% url 'planner:carry_over' plan.date %}" class="carry" data-keep-scroll>{% csrf_token %}
+        <input type="hidden" name="from" value="{{ carry_plan.pk }}">
+        <span>{{ carry_count }} unfinished from {{ carry_plan.date|date:"D j M" }}</span>
+        <button class="btn sm">Bring them over</button>
+      </form>
+    {% endif %}
+
+    <section class="card" id="prioritise">
+      <header class="card-head">
+        <span class="step">2</span>
+        <div><h2>Prioritise</h2><p class="sub">Max 3 must-dos. If only those got done, the day still counts.</p></div>
+      </header>
+      {% if not tasks %}
+        <p class="empty">No tasks yet. Start with the brain dump above.</p>
+      {% endif %}
+      {% for g in groups %}
+        {% if g.tasks or g.value == 1 %}
+        <div class="group p{{ g.value }}">
+          <h3>{{ g.label }} <span class="count">{{ g.tasks|length }}</span></h3>
+          {% if g.value == 1 and too_many_musts %}
+            <p class="hint warn">{{ g.tasks|length }} must-dos is too many. Demote some so the top 3 actually get done.</p>
+          {% elif g.value == 1 and not g.tasks %}
+            <p class="hint">Nothing marked must-do. Open a task and set its priority, or start a line with <code>!</code>.</p>
+          {% endif %}
+          <ul class="tasks">
+            {% for t in g.tasks %}{% include "planner/_task.html" %}{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card" id="timeblock">
+      <header class="card-head">
+        <span class="step">3</span>
+        <div><h2>Time-block</h2><p class="sub">Give every task a slot. Hard thinking goes first, with breaks built in.</p></div>
+      </header>
+
+      <form method="post" action="{% url 'planner:update_plan' plan.date %}" class="hours" data-keep-scroll>{% csrf_token %}
+        <input type="hidden" name="anchor" value="timeblock">
+        <label>Start<input type="time" name="day_start" value="{{ plan.day_start|time:'H:i' }}" required></label>
+        <label>End<input type="time" name="day_end" value="{{ plan.day_end|time:'H:i' }}" required></label>
+        <button class="btn sm">Set hours</button>
+      </form>
+
+      <div class="schedule-actions">
+        <form method="post" action="{% url 'planner:schedule' plan.date %}" data-keep-scroll>{% csrf_token %}
+          <input type="hidden" name="action" value="auto">
+          <button class="btn primary"{% if not unscheduled %} disabled{% endif %}>
+            Auto-schedule{% if unscheduled %} {{ unscheduled }}{% endif %}
+          </button>
+        </form>
+        <form method="post" action="{% url 'planner:schedule' plan.date %}" data-keep-scroll>{% csrf_token %}
+          <input type="hidden" name="action" value="clear">
+          <button class="btn ghost">Clear times</button>
+        </form>
+        {% if has_routines %}
+        <form method="post" action="{% url 'planner:apply_routines' plan.date %}" data-keep-scroll>{% csrf_token %}
+          <button class="btn ghost">Add routines</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if cap.over %}
+        <p class="hint warn">You've planned {{ cap.load|hm }} into a {{ cap.window|hm }} day. Something has to go. Move could-dos to another day.</p>
+      {% elif cap.tight %}
+        <p class="hint">That's {{ cap.pct }}% of your day booked. Leave some slack for things that run over.</p>
+      {% endif %}
+
+      {% if timeline %}
+        <ol class="timeline">
+          {% for r in timeline %}
+            {% if r.marker %}
+              <li class="marker{% if r.task.done %} done{% endif %}{% if r.past %} past{% endif %}">
+                <div class="when">{{ r.task.start_time|time:"g:i A" }}</div>
+                <a href="#task-{{ r.task.pk }}" class="t">{{ r.task.title }}</a>
+                <form method="post" action="{% url 'planner:task_action' r.task.pk 'toggle' %}" data-keep-scroll>{% csrf_token %}
+                  <button class="checkbox sm" aria-label="Toggle done" aria-pressed="{{ r.task.done|yesno:'true,false' }}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg></button>
+                </form>
+              </li>
+            {% elif r.gap %}
+              <li class="gap"><span class="when">{{ r.start|time:"g:i A" }}</span><span>{{ r.minutes|hm }} free</span></li>
+            {% else %}
+              <li class="block cat-{{ r.task.category }}{% if r.now %} now{% endif %}{% if r.past %} past{% endif %}{% if r.task.done %} done{% endif %}">
+                <div class="when">{{ r.task.start_time|time:"g:i A" }}<span>{{ r.end|time:"g:i A" }}</span></div>
+                <div class="what">
+                  <a href="#task-{{ r.task.pk }}" class="t">{% if r.task.is_frog %}🐸 {% endif %}{{ r.task.title }}</a>
+                  <span class="m">{{ r.task.duration_minutes|hm }} · {{ r.task.get_category_display }}{% if r.now %} · <strong>now</strong>{% endif %}</span>
+                  {% if r.clash %}<span class="pill warn">Overlaps</span>{% endif %}
+                  {% if r.outside %}<span class="pill warn">Outside hours</span>{% endif %}
+                </div>
+                <form method="post" action="{% url 'planner:task_action' r.task.pk 'toggle' %}" data-keep-scroll>{% csrf_token %}
+                  <button class="checkbox sm" aria-label="Toggle done" aria-pressed="{{ r.task.done|yesno:'true,false' }}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg></button>
+                </form>
+              </li>
+            {% endif %}
+          {% endfor %}
+        </ol>
+      {% elif not anytime %}
+        <p class="empty">Nothing on the clock yet. Add tasks, then hit <strong>Auto-schedule</strong>, or set start times yourself.</p>
+      {% endif %}
+
+      {% if anytime %}
+        <h3 class="anytime-head">Anytime today <span class="count">{{ anytime|length }}</span></h3>
+        <p class="hint">No set length. Fit these into the free gaps.</p>
+        <ul class="anytime">
+          {% for t in anytime %}
+            <li class="{% if t.done %}done{% endif %}">
+              <form method="post" action="{% url 'planner:task_action' t.pk 'toggle' %}" data-keep-scroll>{% csrf_token %}
+                <button class="checkbox sm" aria-label="Toggle done" aria-pressed="{{ t.done|yesno:'true,false' }}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg></button>
+              </form>
+              <a href="#task-{{ t.pk }}" class="t">{% if t.is_frog %}🐸 {% endif %}{{ t.title }}</a>
+              {% if t.priority == 1 %}<span class="pill time">Must</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+
+    <section class="card" id="notes">
+      <header class="card-head">
+        <span class="step">✎</span>
+        <div><h2>Check-in</h2><p class="sub">How's your energy? Plan heavy work around it.</p></div>
+      </header>
+      <form method="post" action="{% url 'planner:update_plan' plan.date %}" data-keep-scroll>{% csrf_token %}
+        <input type="hidden" name="anchor" value="notes">
+        <fieldset class="rating">
+          <legend>Energy</legend>
+          {% for i in "12345" %}
+            <label><input type="radio" name="energy" value="{{ i }}"{% if plan.energy|stringformat:"s" == i %} checked{% endif %}><span>{{ i }}</span></label>
+          {% endfor %}
+        </fieldset>
+        {% if plan.energy and plan.energy <= 2 %}
+          <p class="hint">Low energy day: keep it to 1–2 must-dos and save admin for the afternoon.</p>
+        {% endif %}
+        <label class="stack">Notes<textarea name="notes" rows="3" placeholder="Anything on your mind…">{{ plan.notes }}</textarea></label>
+        <button class="btn">Save</button>
+      </form>
+    </section>
+
+    <section class="card" id="review">
+      <details{% if evening or is_past or plan.wins or plan.improve %} open{% endif %}>
+        <summary class="card-head">
+          <span class="step">4</span>
+          <div><h2>Shutdown</h2><p class="sub">2 minutes at the end of the day. Close the loop, then plan tomorrow.</p></div>
+        </summary>
+        <form method="post" action="{% url 'planner:review' plan.date %}" data-keep-scroll>{% csrf_token %}
+          <p class="review-score">You finished <strong>{{ done }} of {{ total }}</strong> tasks and <strong>{{ must_done }} of {{ must_total }}</strong> must-dos.</p>
+          <label class="stack">Wins<textarea name="wins" rows="2" placeholder="What went well?">{{ plan.wins }}</textarea></label>
+          <label class="stack">Do differently tomorrow<textarea name="improve" rows="2" placeholder="One thing to change">{{ plan.improve }}</textarea></label>
+          <fieldset class="rating">
+            <legend>Rate the day</legend>
+            {% for i in "12345" %}
+              <label><input type="radio" name="rating" value="{{ i }}"{% if plan.rating|stringformat:"s" == i %} checked{% endif %}><span>{{ i }}</span></label>
+            {% endfor %}
+          </fieldset>
+          <div class="review-actions">
+            <button class="btn primary">Close out day</button>
+            <a class="btn ghost" href="{% url 'planner:day' next_day %}">Plan {{ next_day|date:"l" }} →</a>
+          </div>
+        </form>
+      </details>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Cmd/Ctrl+Enter adds the brain dump.
+  document.querySelector("#dump-form textarea").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); this.form.requestSubmit(); }
+  });
+  // Only one task editor open at a time keeps the list scannable on a phone.
+  document.querySelectorAll(".task-body").forEach(function (d) {
+    d.addEventListener("toggle", function () {
+      if (!d.open) return;
+      document.querySelectorAll(".task-body[open]").forEach(function (o) { if (o !== d) o.open = false; });
+    });
+  });
+  // Auto-open a task when you jump to it from the timeline.
+  function openFromHash() {
+    var el = location.hash && document.querySelector(location.hash + " .task-body");
+    if (el) el.open = true;
+  }
+  window.addEventListener("hashchange", openFromHash);
+  openFromHash();
+</script>
+{% endblock %}

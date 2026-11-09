@@ -1,0 +1,10 @@
+{% if f.non_field_errors %}<p class="hint warn span-all">{{ f.non_field_errors|join:" " }}</p>{% endif %}
+<label class="span-all">Title{{ f.title }}</label>
+<label>Start <small>(optional)</small>{{ f.start_time }}</label>
+<label>Minutes <small>(optional)</small>{{ f.duration_minutes }}</label>
+<label class="span-all">Type{{ f.category }}</label>
+<fieldset class="days span-all">
+  <legend>Days</legend>
+  {% for cb in f.days %}<label>{{ cb.tag }}<span>{{ cb.choice_label }}</span></label>{% endfor %}
+</fieldset>
+<label class="toggle span-all">{{ f.active }} Active</label>

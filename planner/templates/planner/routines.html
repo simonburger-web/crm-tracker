@@ -1,0 +1,59 @@
+{% extends "planner/base.html" %}
+{% load planner_extras %}
+{% block title %}Routines · Planner{% endblock %}
+
+{% block content %}
+<section class="dayhead">
+  <div class="daytitle">
+    <span class="eyebrow">Daily planner</span>
+    <h1>Routines</h1>
+  </div>
+  <p class="sub">Fixed blocks you repeat, like gym, lunch, school run or a team standup. They're added to each new day automatically. Give a routine a time and a length to block out time (gym 7–8am). Give it a time only for a checkpoint (out of bed at 7am). Leave both empty for a daily habit.</p>
+</section>
+
+<div class="grid">
+  <div class="col">
+    <section class="card">
+      <header class="card-head"><span class="step">+</span><div><h2>New routine</h2></div></header>
+      <form method="post" class="edit-grid">{% csrf_token %}
+        {% include "planner/_routine_fields.html" with f=form %}
+        <button class="btn primary span-all">Add routine</button>
+      </form>
+    </section>
+  </div>
+  <div class="col">
+    <section class="card">
+      <header class="card-head"><span class="step">↻</span><div><h2>Your routines</h2></div></header>
+      {% if not items %}<p class="empty">None yet. Lunch is a good one to start with, since breaks are part of the plan.</p>{% endif %}
+      <ul class="tasks">
+        {% for r, f in items %}
+          <li class="task cat-{{ r.category }}{% if not r.active %} done{% endif %}">
+            <details class="task-body">
+              <summary>
+                <span class="title">{{ r.title }}</span>
+                <span class="meta">
+                  {% if r.start_time %}<span class="pill time">{{ r.start_time|time:"g:i A" }}</span>{% endif %}
+                  {% if r.duration_minutes %}<span class="pill">{{ r.duration_minutes|hm }}</span>{% elif r.start_time %}<span class="pill">Checkpoint</span>{% else %}<span class="pill">Anytime</span>{% endif %}
+                  <span class="pill">{{ r.weekday_labels }}</span>
+                  {% if not r.active %}<span class="pill">Paused</span>{% endif %}
+                </span>
+              </summary>
+              <div class="task-panel">
+                <form method="post" action="{% url 'planner:routine_action' r.pk 'edit' %}" class="edit-grid">{% csrf_token %}
+                  {% include "planner/_routine_fields.html" %}
+                  <button class="btn primary span-all">Save</button>
+                </form>
+                <div class="task-actions">
+                  <form method="post" action="{% url 'planner:routine_action' r.pk 'delete' %}" onsubmit="return confirm('Delete this routine?')">{% csrf_token %}
+                    <button class="btn ghost sm danger">Delete</button>
+                  </form>
+                </div>
+              </div>
+            </details>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>
+{% endblock %}

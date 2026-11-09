@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'crm.apps.CrmConfig',
     'gym.apps.GymConfig',
+    'planner.apps.PlannerConfig',
 ]
 
 MIDDLEWARE = [
