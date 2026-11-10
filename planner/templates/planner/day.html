@@ -138,6 +138,23 @@
         <button class="btn sm">Set hours</button>
       </form>
 
+      {% if routines_scheduled or plan.routines_off %}
+      <div class="routine-switch{% if plan.routines_off %} off{% endif %}">
+        <div>
+          <strong>Routines</strong>
+          <span class="muted">
+            {% if plan.routines_off %}Off for this day only. Other days, including next {{ plan.date|date:"l" }}, keep theirs.{% else %}On for this {{ plan.date|date:"l" }}. Switch off if today runs differently.{% endif %}
+          </span>
+        </div>
+        <form method="post" action="{% url 'planner:toggle_routines' plan.date %}" data-keep-scroll>{% csrf_token %}
+          <input type="hidden" name="state" value="{% if plan.routines_off %}on{% else %}off{% endif %}">
+          <button class="btn sm{% if plan.routines_off %} primary{% else %} ghost{% endif %}" aria-pressed="{{ plan.routines_off|yesno:'true,false' }}">
+            {% if plan.routines_off %}Switch on{% else %}Switch off for this day{% endif %}
+          </button>
+        </form>
+      </div>
+      {% endif %}
+
       <div class="schedule-actions">
         <form method="post" action="{% url 'planner:schedule' plan.date %}" data-keep-scroll>{% csrf_token %}
           <input type="hidden" name="action" value="auto">
@@ -149,7 +166,7 @@
           <input type="hidden" name="action" value="clear">
           <button class="btn ghost">Clear times</button>
         </form>
-        {% if has_routines %}
+        {% if has_routines and not plan.routines_off %}
         <form method="post" action="{% url 'planner:apply_routines' plan.date %}" data-keep-scroll>{% csrf_token %}
           <button class="btn ghost">Add routines</button>
         </form>

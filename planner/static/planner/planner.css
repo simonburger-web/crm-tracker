@@ -288,6 +288,16 @@ label > input, label > select, label > textarea { color: var(--text); font-weigh
 
 /* ---------- time-block ---------- */
 .hours { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+.routine-switch {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 10px 10px 10px 14px; margin-bottom: 12px; border-radius: var(--radius);
+  background: var(--surface-2); font-size: 13px;
+}
+.routine-switch strong { display: block; font-size: 14px; }
+.routine-switch .muted { display: block; margin-top: 2px; }
+.routine-switch form { margin: 0; flex: none; }
+.routine-switch.off { background: var(--warn-soft); }
+.routine-switch.off strong { color: var(--warn); }
 .schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .schedule-actions form { margin: 0; }
 .schedule-actions form:first-child { flex: 1 1 160px; }

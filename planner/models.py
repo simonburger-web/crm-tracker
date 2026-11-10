@@ -20,6 +20,7 @@ class DayPlan(models.Model):
     date = models.DateField(unique=True)
     day_start = models.TimeField(default=time(8, 0))
     day_end = models.TimeField(default=time(18, 0))
+    routines_off = models.BooleanField(default=False, help_text="Skip routine blocks on this day only")
     intention = models.CharField("Today is a win if…", max_length=200, blank=True)
     energy = models.PositiveSmallIntegerField(null=True, blank=True, choices=[(i, str(i)) for i in range(1, 6)])
     notes = models.TextField(blank=True)

@@ -41,6 +41,8 @@ def _next_order(plan):
 
 
 def _apply_routines(plan):
+    if plan.routines_off:
+        return 0
     existing = set(plan.tasks.exclude(routine=None).values_list("routine_id", flat=True))
     added = 0
     for r in Routine.objects.filter(active=True):
@@ -114,6 +116,7 @@ def day_view(request, day):
 
     done = sum(t.done for t in tasks)
     evening = is_today and timezone.localtime().hour >= 17
+    active_routines = list(Routine.objects.filter(active=True))
 
     return render(request, "planner/day.html", {
         "plan": plan,
@@ -142,7 +145,9 @@ def day_view(request, day):
         "carry_count": carry_count,
         "plan_form": PlanForm(instance=plan),
         "review_form": ReviewForm(instance=plan),
-        "has_routines": Routine.objects.filter(active=True).exists(),
+        "has_routines": bool(active_routines),
+        "routines_scheduled": any(t.routine_id for t in tasks)
+        or any(r.runs_on(day) for r in active_routines),
         "priorities": Priority.choices,
         "categories": Category.choices,
     })
@@ -241,8 +246,38 @@ def carry_over(request, day):
 @require_POST
 def apply_routines(request, day):
     plan = get_plan(day)
+    if plan.routines_off:
+        messages.info(request, "Routines are switched off for this day. Switch them back on to add them.")
+        return _back(plan, "timeblock")
     n = _apply_routines(plan)
     messages.info(request, f"Added {n} routine block{'s' if n != 1 else ''}." if n else "Routines already on the plan.")
+    return _back(plan, "timeblock")
+
+
+@planner_view
+@require_POST
+def toggle_routines(request, day):
+    plan = get_plan(day)
+    # The form says which state it wants, so a double-tap can't flip it straight back.
+    want_off = request.POST.get("state", "off" if not plan.routines_off else "on") == "off"
+    if want_off == plan.routines_off:
+        return _back(plan, "timeblock")
+    with transaction.atomic():
+        plan.routines_off = want_off
+        plan.save(update_fields=["routines_off"])
+        if want_off:
+            # Blocks already ticked off stay as a record of what you did.
+            n, _ = plan.tasks.filter(routine__isnull=False, done=False).delete()
+        else:
+            n = _apply_routines(plan)
+    if want_off:
+        messages.info(
+            request,
+            f"Routines off for {plan.date:%a %d %b} only – removed {n} routine block{'s' if n != 1 else ''}. "
+            "Other days keep their routines.",
+        )
+    else:
+        messages.success(request, f"Routines back on – added {n} block{'s' if n != 1 else ''}.")
     return _back(plan, "timeblock")
 
 

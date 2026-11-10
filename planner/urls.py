@@ -32,4 +32,5 @@ urlpatterns = [
     path("<isodate:day>/schedule/", views.schedule, name="schedule"),
     path("<isodate:day>/carry/", views.carry_over, name="carry_over"),
     path("<isodate:day>/routines/", views.apply_routines, name="apply_routines"),
+    path("<isodate:day>/routines/toggle/", views.toggle_routines, name="toggle_routines"),
 ]

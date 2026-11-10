@@ -174,3 +174,71 @@ class ViewTests(TestCase):
         g = Routine.objects.get(title="Gym")
         self.assertEqual(g.weekdays, "024")
         self.assertContains(self.client.get(reverse("planner:routines")), "Mon, Wed, Fri")
+
+
+class RoutineToggleTests(TestCase):
+    def setUp(self):
+        self.day = timezone.localdate() + timedelta(days=2)
+        self.url = reverse("planner:day", args=[self.day])
+        Routine.objects.create(title="Gym", start_time=time(7), duration_minutes=60, weekdays="0123456")
+
+    def test_toggle_off_only_affects_that_day(self):
+        self.client.get(self.url)
+        plan = DayPlan.objects.get(date=self.day)
+        self.assertTrue(plan.tasks.filter(routine__isnull=False).exists())
+        self.assertContains(self.client.get(self.url), "Switch off for this day")
+
+        self.client.post(reverse("planner:toggle_routines", args=[self.day]))
+        plan.refresh_from_db()
+        self.assertTrue(plan.routines_off)
+        self.assertFalse(plan.tasks.filter(routine__isnull=False).exists())
+
+        # The same weekday next week is untouched.
+        next_week = self.day + timedelta(days=7)
+        self.client.get(reverse("planner:day", args=[next_week]))
+        next_plan = DayPlan.objects.get(date=next_week)
+        self.assertFalse(next_plan.routines_off)
+        self.assertTrue(next_plan.tasks.filter(title="Gym").exists())
+
+        # "Add routines" can't sneak them back while they're switched off.
+        self.client.post(reverse("planner:apply_routines", args=[self.day]))
+        self.assertFalse(plan.tasks.filter(routine__isnull=False).exists())
+
+    def test_toggle_back_on_restores_routines(self):
+        self.client.get(self.url)
+        self.client.post(reverse("planner:toggle_routines", args=[self.day]))
+        self.client.post(reverse("planner:toggle_routines", args=[self.day]))
+        plan = DayPlan.objects.get(date=self.day)
+        self.assertFalse(plan.routines_off)
+        self.assertEqual(plan.tasks.filter(title="Gym").count(), 1)
+
+    def test_custom_tasks_survive_toggle_off(self):
+        self.client.post(reverse("planner:add_tasks", args=[self.day]), {"lines": "Call Bob"})
+        self.client.post(reverse("planner:toggle_routines", args=[self.day]))
+        plan = DayPlan.objects.get(date=self.day)
+        self.assertFalse(plan.tasks.filter(routine__isnull=False).exists())
+        self.assertTrue(plan.tasks.filter(title="Call Bob", routine=None).exists())
+
+    def test_no_switch_when_no_routine_runs_that_day(self):
+        Routine.objects.all().delete()
+        other_days = "".join(str(i) for i in range(7) if i != self.day.weekday())
+        Routine.objects.create(title="Gym", weekdays=other_days)
+        self.assertNotContains(self.client.get(self.url), "Switch off for this day")
+
+    def test_double_tap_does_not_flip_back(self):
+        self.client.get(self.url)
+        url = reverse("planner:toggle_routines", args=[self.day])
+        self.client.post(url, {"state": "off"})
+        self.client.post(url, {"state": "off"})
+        plan = DayPlan.objects.get(date=self.day)
+        self.assertTrue(plan.routines_off)
+        self.assertFalse(plan.tasks.filter(routine__isnull=False).exists())
+
+    def test_done_routine_blocks_are_kept(self):
+        self.client.get(self.url)
+        plan = DayPlan.objects.get(date=self.day)
+        plan.tasks.filter(title="Gym").update(done=True)
+        self.client.post(reverse("planner:toggle_routines", args=[self.day]), {"state": "off"})
+        self.assertTrue(plan.tasks.filter(title="Gym", done=True).exists())
+        self.client.post(reverse("planner:toggle_routines", args=[self.day]), {"state": "on"})
+        self.assertEqual(plan.tasks.filter(title="Gym").count(), 1)
