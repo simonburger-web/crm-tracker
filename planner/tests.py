@@ -29,7 +29,7 @@ class ParseTests(TestCase):
     def test_could_and_defaults(self):
         p = parse_line("?tidy notes")
         self.assertEqual(p["priority"], Priority.COULD)
-        self.assertIsNone(p["duration_minutes"])   # no length given = anytime task
+        self.assertEqual(p["duration_minutes"], 30)   # no length given = 30 minutes
         self.assertIsNone(parse_line("   "))
         self.assertIsNone(parse_line("!"))
 

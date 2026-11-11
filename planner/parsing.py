@@ -3,7 +3,7 @@
 One task per line. Optional markers, in any order:
   !Title          must-do        ?Title   could-do (default: should-do)
   45m / 1.5h      duration       @9:30 / @2pm   fixed start time
-  (no length = anytime task, or a checkpoint if it has a time)
+  (no length = 30 minutes; clear it on the task to make it anytime)
   #deep #admin #call #personal   category       #frog   hardest task first
 """
 import re
@@ -14,6 +14,8 @@ from .models import Category, Priority
 DURATION_RE = re.compile(r"(?<!\S)(\d+(?:\.\d+)?)\s?(h|hr|hrs|hours?|m|mins?|minutes?)(?!\S)", re.I)
 TIME_RE = re.compile(r"(?<!\S)@(\d{1,2})(?::(\d{2}))?\s?(am|pm|a|p)?(?!\S)", re.I)
 TAG_RE = re.compile(r"(?<!\S)#(\w+)")
+
+DEFAULT_MINUTES = 30  # a task typed without a length
 
 TAGS = {
     "deep": Category.DEEP, "focus": Category.DEEP,
@@ -37,7 +39,7 @@ def parse_line(line):
     elif text.startswith("?"):
         priority, text = Priority.COULD, text.lstrip("?").strip()
 
-    duration, start, category, frog = None, None, None, False
+    duration, start, category, frog = DEFAULT_MINUTES, None, None, False
 
     m = DURATION_RE.search(text)
     if m:
@@ -85,7 +87,7 @@ def parse_line(line):
         "title": title[:200],
         "priority": priority,
         "category": category,
-        "duration_minutes": None if duration is None else max(5, min(duration, 600)),
+        "duration_minutes": max(5, min(duration, 600)),
         "start_time": start,
         "is_frog": frog,
     }
