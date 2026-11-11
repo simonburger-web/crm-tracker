@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Max
 from django.forms import modelform_factory
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -82,6 +83,17 @@ def _own_task(request, pk):
 @planner_view
 def today(request):
     return redirect("planner:day", day=timezone.localdate())
+
+
+def manifest(request):
+    # A home-screen icon opens /planner/, which always redirects to today,
+    # whichever day was on screen when the icon was added.
+    data = {
+        "name": "Planner", "short_name": "Planner",
+        "start_url": reverse("planner:today"), "scope": reverse("planner:today"),
+        "display": "standalone", "background_color": "#f6f5f1", "theme_color": "#f6f5f1",
+    }
+    return JsonResponse(data, content_type="application/manifest+json")
 
 
 @planner_view

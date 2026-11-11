@@ -10,9 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="Planner">
   <meta name="format-detection" content="telephone=no">
   <title>{% block title %}Planner{% endblock %}</title>
+  <link rel="manifest" href="{% url 'planner:manifest' %}">
   <link rel="stylesheet" href="{% static 'planner/planner.css' %}">
 </head>
-<body>
+<body data-today-url="{% url 'planner:today' %}"{% if is_today %} data-viewing-today="{{ real_today|date:'Y-m-d' }}"{% endif %}>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="{% url 'planner:today' %}">Planner</a>
@@ -34,6 +35,30 @@
   </main>
 
   <script>
+    // Opened from the home screen: always land on today, even if the icon was
+    // saved on another day, and roll over to the new day if the app was left open overnight.
+    (function () {
+      var standalone = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+      if (!standalone) return;
+      var b = document.body, todayUrl = b.dataset.todayUrl;
+      var isDayPage = /\/\d{4}-\d{2}-\d{2}\/$/.test(location.pathname);
+      try {
+        if (!sessionStorage.getItem("launched")) {
+          sessionStorage.setItem("launched", "1");
+          if (isDayPage && !b.dataset.viewingToday) { location.replace(todayUrl); return; }
+        }
+      } catch (e) {}
+      function localDate() {
+        // Same clock as the server (Africa/Johannesburg); en-CA formats as YYYY-MM-DD.
+        return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date());
+      }
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible" && b.dataset.viewingToday && b.dataset.viewingToday !== localDate()) {
+          location.replace(todayUrl);
+        }
+      });
+    })();
+
     // Keep your scroll position across form submits (every action is a normal POST).
     (function () {
       var key = "scroll:" + location.pathname;

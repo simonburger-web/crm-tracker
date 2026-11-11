@@ -242,3 +242,16 @@ class RoutineToggleTests(TestCase):
         self.assertTrue(plan.tasks.filter(title="Gym", done=True).exists())
         self.client.post(reverse("planner:toggle_routines", args=[self.day]), {"state": "on"})
         self.assertEqual(plan.tasks.filter(title="Gym").count(), 1)
+
+
+from .views import PLANNER_TZ  # noqa: E402
+
+
+class HomeScreenTests(TestCase):
+    def test_manifest_starts_on_today(self):
+        r = self.client.get(reverse("planner:manifest"))
+        self.assertEqual(r.json()["start_url"], reverse("planner:today"))
+        with timezone.override(PLANNER_TZ):
+            today = timezone.localdate()
+        self.assertRedirects(self.client.get(r.json()["start_url"]),
+                             reverse("planner:day", args=[today]), fetch_redirect_response=False)

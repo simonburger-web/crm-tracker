@@ -22,6 +22,7 @@ app_name = "planner"
 urlpatterns = [
     path("", views.today, name="today"),
     path("go/", views.go, name="go"),
+    path("manifest.webmanifest", views.manifest, name="manifest"),
     path("routines/", views.routines, name="routines"),
     path("routines/<int:pk>/<str:action>/", views.routine_action, name="routine_action"),
     path("task/<int:pk>/<str:action>/", views.task_action, name="task_action"),
