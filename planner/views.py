@@ -1,3 +1,4 @@
+import json
 from datetime import date as date_cls, timedelta
 from functools import wraps
 from zoneinfo import ZoneInfo
@@ -15,7 +16,7 @@ from django.views.decorators.http import require_POST
 from .forms import PlanForm, ReviewForm, RoutineForm, TaskForm
 from .models import Category, DayPlan, Priority, Routine, Task
 from .parsing import parse_line
-from .scheduling import auto_schedule, capacity, timeline, to_min
+from .scheduling import auto_schedule, capacity, reorder, timeline, timeline_order, to_min
 
 
 # Same clock as the gym: "today", "tomorrow" and the now-marker use local time, not the server's UTC.
@@ -291,6 +292,27 @@ def toggle_routines(request, day):
     else:
         messages.success(request, f"Routines back on – added {n} block{'s' if n != 1 else ''}.")
     return _back(plan, "timeblock")
+
+
+@planner_view
+@require_POST
+def reorder_timeline(request, day):
+    """Drag-and-drop on the timeline: body is {"moved": id, "order": [task ids in new order]}."""
+    plan = get_plan(day)
+    try:
+        body = json.loads(request.body)
+        ids, moved = [int(i) for i in body["order"]], int(body["moved"])
+    except (ValueError, KeyError, TypeError):
+        return JsonResponse({"error": "bad request"}, status=400)
+    with transaction.atomic():
+        current = timeline_order(plan.tasks.select_for_update())
+        try:
+            changed = reorder(current, ids, moved)
+        except ValueError as e:
+            return JsonResponse({"error": str(e)}, status=409)
+        for t in changed:
+            t.save(update_fields=["start_time"])
+    return JsonResponse({"changed": len(changed)})
 
 
 # ---------------------------------------------------------------- task actions

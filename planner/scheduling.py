@@ -77,6 +77,52 @@ def auto_schedule(tasks, day_start, day_end, earliest=None):
     return placed, overflow
 
 
+def reorder(tasks, new_ids, moved_id):
+    """Re-time scheduled tasks after one was dragged to a new spot on the timeline.
+
+    `tasks` are the scheduled tasks in current timeline order, `new_ids` the same
+    ids in their dropped order and `moved_id` the one that was dragged. The moved
+    task starts when the one above it ends (or where the one below it started, if
+    dropped at the top). Tasks after it are pushed later only as far as needed to
+    stop overlapping; everything else keeps its time. Returns the changed tasks.
+    """
+    by_id = {t.id: t for t in tasks}
+    if sorted(by_id) != sorted(new_ids) or len(new_ids) != len(set(new_ids)) or moved_id not in by_id:
+        raise ValueError("order must list every scheduled task exactly once")
+    pos = new_ids.index(moved_id)
+    moved = by_id[moved_id]
+
+    if pos > 0:
+        above = by_id[new_ids[pos - 1]]
+        start = to_min(above.start_time) + (above.duration_minutes or 0)
+    elif len(new_ids) > 1:
+        start = to_min(by_id[new_ids[1]].start_time)
+    else:
+        return []
+
+    changed = []
+    if to_min(moved.start_time) != start:
+        moved.start_time = to_time(start)
+        changed.append(moved)
+    cursor = start + (moved.duration_minutes or 0)
+    for tid in new_ids[pos + 1:]:
+        t = by_id[tid]
+        if to_min(t.start_time) >= cursor:
+            break  # no overlap from here on, so the rest of the day keeps its times
+        t.start_time = to_time(cursor)
+        changed.append(t)
+        cursor += t.duration_minutes or 0
+    return changed
+
+
+def timeline_order(tasks):
+    """Scheduled tasks in the order the timeline shows them."""
+    return sorted(
+        (t for t in tasks if t.start_time is not None),
+        key=lambda t: (t.start_time, t.duration_minutes is not None, t.priority, t.order, t.id or 0),
+    )
+
+
 def capacity(plan, tasks):
     """Minutes available vs. minutes committed for the day."""
     window = max(0, to_min(plan.day_end) - to_min(plan.day_start))
@@ -101,7 +147,7 @@ def capacity(plan, tasks):
 
 def timeline(plan, tasks, now_minutes=None):
     """Scheduled items in order, with free gaps between them."""
-    items = sorted((t for t in tasks if t.start_time is not None), key=lambda t: (t.start_time, t.priority))
+    items = timeline_order(tasks)
     rows, cursor = [], to_min(plan.day_start)
     for t in items:
         s, e = to_min(t.start_time), t.end_minutes

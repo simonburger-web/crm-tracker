@@ -180,10 +180,11 @@
       {% endif %}
 
       {% if timeline %}
-        <ol class="timeline">
+        <ol class="timeline" data-reorder-url="{% url 'planner:reorder' plan.date %}">
           {% for r in timeline %}
             {% if r.marker %}
-              <li class="marker{% if r.task.done %} done{% endif %}{% if r.past %} past{% endif %}">
+              <li class="marker{% if r.task.done %} done{% endif %}{% if r.past %} past{% endif %}" data-id="{{ r.task.pk }}">
+                <button type="button" class="grip" aria-label="Drag to move {{ r.task.title }}" title="Drag to reorder"><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></svg></button>
                 <div class="when">{{ r.task.start_time|time:"g:i A" }}</div>
                 <a href="#task-{{ r.task.pk }}" class="t">{{ r.task.title }}</a>
                 <form method="post" action="{% url 'planner:task_action' r.task.pk 'toggle' %}" data-keep-scroll>{% csrf_token %}
@@ -193,7 +194,8 @@
             {% elif r.gap %}
               <li class="gap"><span class="when">{{ r.start|time:"g:i A" }}</span><span>{{ r.minutes|hm }} free</span></li>
             {% else %}
-              <li class="block cat-{{ r.task.category }}{% if r.now %} now{% endif %}{% if r.past %} past{% endif %}{% if r.task.done %} done{% endif %}">
+              <li class="block cat-{{ r.task.category }}{% if r.now %} now{% endif %}{% if r.past %} past{% endif %}{% if r.task.done %} done{% endif %}" data-id="{{ r.task.pk }}">
+                <button type="button" class="grip" aria-label="Drag to move {{ r.task.title }}" title="Drag to reorder"><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></svg></button>
                 <div class="when">{{ r.task.start_time|time:"g:i A" }}<span>{{ r.end|time:"g:i A" }}</span></div>
                 <div class="what">
                   <a href="#task-{{ r.task.pk }}" class="t">{% if r.task.is_frog %}🐸 {% endif %}{{ r.task.title }}</a>
@@ -297,5 +299,88 @@
   }
   window.addEventListener("hashchange", openFromHash);
   openFromHash();
+
+  // Drag a timeline block by its grip and drop it between two others; the server
+  // re-times it and ripples everything after it, then we reload to show new times.
+  (function () {
+    var list = document.querySelector(".timeline[data-reorder-url]");
+    if (!list) return;
+    var csrf = (document.querySelector("[name=csrfmiddlewaretoken]") || {}).value;
+    var drag = null;
+    // On wide screens the timeline column scrolls on its own; keep its place across the reload.
+    var col = list.closest(".col"), COL_KEY = "colscroll:" + location.pathname;
+    try {
+      var cy = sessionStorage.getItem(COL_KEY);
+      if (cy !== null && col) col.scrollTop = parseInt(cy, 10);
+      sessionStorage.removeItem(COL_KEY);
+    } catch (err) {}
+
+    function items() { return Array.prototype.slice.call(list.querySelectorAll("li[data-id]")); }
+    function ids() { return items().map(function (li) { return li.dataset.id; }); }
+
+    list.addEventListener("pointerdown", function (e) {
+      var grip = e.target.closest(".grip");
+      if (!grip || e.button > 0) return;
+      var li = grip.closest("li[data-id]");
+      e.preventDefault();
+      var rect = li.getBoundingClientRect();
+      // The floating copy sits in its own .timeline so it keeps the block styling.
+      var ghost = document.createElement("ol");
+      ghost.className = "timeline drag-ghost";
+      ghost.appendChild(li.cloneNode(true));
+      ghost.style.width = rect.width + "px";
+      ghost.style.left = rect.left + "px";
+      ghost.style.top = rect.top + "px";
+      document.body.appendChild(ghost);
+      li.classList.add("drag-source");
+      list.classList.add("dragging");
+      drag = { li: li, ghost: ghost, dy: e.clientY - rect.top, before: ids().join(), id: e.pointerId, home: li.nextSibling };
+      grip.setPointerCapture(e.pointerId);
+    });
+
+    list.addEventListener("pointermove", function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag.ghost.style.top = (e.clientY - drag.dy) + "px";
+      // Put the placeholder before the first block whose midpoint is below the pointer.
+      var target = items().find(function (li) {
+        if (li === drag.li) return false;
+        var r = li.getBoundingClientRect();
+        return e.clientY < r.top + r.height / 2;
+      });
+      if (target) { if (target.previousElementSibling !== drag.li) list.insertBefore(drag.li, target); }
+      else {
+        var last = items().filter(function (li) { return li !== drag.li; }).pop();
+        if (last && last.nextElementSibling !== drag.li) list.insertBefore(drag.li, last.nextSibling);
+      }
+      // Scroll the page (or the sticky column) when dragging near the edge.
+      var scroller = col && col.scrollHeight > col.clientHeight ? col : document.scrollingElement;
+      if (e.clientY < 60) scroller.scrollBy(0, -12);
+      else if (e.clientY > window.innerHeight - 60) scroller.scrollBy(0, 12);
+    });
+
+    function finish(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var d = drag; drag = null;
+      d.ghost.remove();
+      d.li.classList.remove("drag-source");
+      list.classList.remove("dragging");
+      var order = ids();
+      if (e.type === "pointercancel") { list.insertBefore(d.li, d.home); return; }
+      if (order.join() === d.before) return;
+      list.classList.add("saving");
+      try {
+        sessionStorage.setItem("scroll:" + location.pathname, String(window.scrollY));
+        if (col) sessionStorage.setItem(COL_KEY, String(col.scrollTop));
+      } catch (err) {}
+      fetch(list.dataset.reorderUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+        body: JSON.stringify({ moved: d.li.dataset.id, order: order }),
+        credentials: "same-origin",
+      }).finally(function () { location.reload(); });
+    }
+    list.addEventListener("pointerup", finish);
+    list.addEventListener("pointercancel", finish);
+  })();
 </script>
 {% endblock %}

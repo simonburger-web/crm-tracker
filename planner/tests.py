@@ -255,3 +255,58 @@ class HomeScreenTests(TestCase):
             today = timezone.localdate()
         self.assertRedirects(self.client.get(r.json()["start_url"]),
                              reverse("planner:day", args=[today]), fetch_redirect_response=False)
+
+
+class ReorderTests(TestCase):
+    def setUp(self):
+        self.plan = DayPlan.objects.create(date=date(2026, 11, 12))
+
+    def add(self, title, start, dur):
+        return Task.objects.create(plan=self.plan, title=title, start_time=start, duration_minutes=dur)
+
+    def times(self):
+        return {t.title: t.start_time for t in self.plan.tasks.all()}
+
+    def post(self, moved, *tasks):
+        url = reverse("planner:reorder", args=[self.plan.date])
+        return self.client.post(url, data={"moved": moved.pk, "order": [t.pk for t in tasks]},
+                                content_type="application/json")
+
+    def test_drop_between_two_tasks_retimes_and_ripples(self):
+        a = self.add("a", time(8, 0), 30)
+        b = self.add("b", time(8, 30), 30)
+        c = self.add("c", time(9, 0), 30)
+        d = self.add("d", time(9, 40), 10)
+        e = self.add("e", time(11, 0), 30)
+        # Drag c up between a and b: c takes 8:30, b is pushed to 9:00, d and e don't clash so stay.
+        r = self.post(c, a, c, b, d, e)
+        self.assertEqual(r.status_code, 200)
+        t = self.times()
+        self.assertEqual((t["a"], t["c"], t["b"]), (time(8, 0), time(8, 30), time(9, 0)))
+        self.assertEqual((t["d"], t["e"]), (time(9, 40), time(11, 0)))
+
+    def test_drop_at_top_and_cascade(self):
+        a = self.add("a", time(8, 0), 30)
+        b = self.add("b", time(8, 30), 30)
+        c = self.add("c", time(9, 0), 60)
+        d = self.add("d", time(10, 0), 30)
+        self.post(c, c, a, b, d)
+        t = self.times()
+        self.assertEqual((t["c"], t["a"], t["b"], t["d"]), (time(8, 0), time(9, 0), time(9, 30), time(10, 0)))
+
+    def test_drag_down_leaves_earlier_tasks_alone(self):
+        cp = self.add("cp", time(7, 0), None)
+        a = self.add("a", time(8, 0), 30)
+        b = self.add("b", time(8, 30), 30)
+        self.post(cp, a, cp, b)
+        t = self.times()
+        self.assertEqual((t["a"], t["cp"], t["b"]), (time(8, 0), time(8, 30), time(8, 30)))
+        # The timeline still shows the checkpoint before b.
+        r = self.client.get(reverse("planner:day", args=[self.plan.date]))
+        rows = [row["task"].title for row in r.context["timeline"] if not row["gap"]]
+        self.assertEqual(rows, ["a", "cp", "b"])
+
+    def test_rejects_mismatched_ids(self):
+        a = self.add("a", time(8, 0), 30)
+        self.add("b", time(8, 30), 30)
+        self.assertEqual(self.post(a, a).status_code, 409)
