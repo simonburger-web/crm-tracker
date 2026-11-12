@@ -1,0 +1,13 @@
+# Railway deploy settings (Railway ignores the Procfile's release line, and unlike Heroku's
+# Python buildpack it does not run collectstatic on its own).
+
+[deploy]
+# Runs once per deploy, before the new version takes traffic. Same as Heroku's release phase:
+# applies only migrations that haven't run yet and never drops data.
+preDeployCommand = ["python manage.py migrate --noinput"]
+
+# Gather CSS/JS/icons into /app/staticfiles for WhiteNoise, then serve on Railway's $PORT.
+startCommand = "sh -c 'python manage.py collectstatic --noinput && exec gunicorn crmtracker.wsgi --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2} --timeout 60 --log-file -'"
+
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

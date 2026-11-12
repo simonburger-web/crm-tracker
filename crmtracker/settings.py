@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,7 +29,26 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-otniwh@hm#p=uk-8p62r5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost 127.0.0.1').split()
+# Railway sets RAILWAY_* variables on every service; Heroku sets DYNO on every dyno.
+ON_RAILWAY = any(k in os.environ for k in ('RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_ID', 'RAILWAY_PROJECT_ID'))
+IN_PRODUCTION = ON_RAILWAY or 'DYNO' in os.environ
+
+# Space- or comma-separated, e.g. "web-production-1003404e.up.railway.app crm.example.com".
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost 127.0.0.1').replace(',', ' ').split()
+# Railway's generated domain is always allowed, so a fresh deploy works before ALLOWED_HOSTS is set.
+RAILWAY_PUBLIC_DOMAIN = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '').strip()
+if RAILWAY_PUBLIC_DOMAIN and RAILWAY_PUBLIC_DOMAIN not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RAILWAY_PUBLIC_DOMAIN)
+
+# Forms POST over HTTPS behind Railway's proxy; trust the public origins explicitly.
+# Extra origins (e.g. a custom domain) can be added as "https://crm.example.com" in CSRF_TRUSTED_ORIGINS.
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').replace(',', ' ').split()
+for _host in ALLOWED_HOSTS:
+    if _host in ('localhost', '127.0.0.1', '*') or _host.startswith('['):
+        continue
+    _origin = f"https://*{_host}" if _host.startswith('.') else f"https://{_host}"
+    if _origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_origin)
 
 
 # Application definition
@@ -48,7 +68,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    # Pages travel to South Africa from Heroku's US region; gzip cuts each page ~4x. Static files are
+    # Pages travel a long way to South Africa; gzip cuts each page ~4x. Static files are
     # already pre-compressed by WhiteNoise above.
     'django.middleware.gzip.GZipMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -84,10 +104,17 @@ WSGI_APPLICATION = 'crmtracker.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# Production must use Postgres from DATABASE_URL. Without it, refuse to start rather than quietly
+# serving an empty SQLite database from the container. Local development still falls back to SQLite.
+if IN_PRODUCTION and not os.environ.get('DATABASE_URL'):
+    raise ImproperlyConfigured('DATABASE_URL is not set. Link the Postgres service to this one.')
+
 DATABASES = {
     'default': dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600,
+        # Re-check pooled connections so a Postgres restart doesn't surface as a one-off 500.
+        conn_health_checks=True,
     )
 }
 
@@ -127,10 +154,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-# Heroku terminates TLS at the router and forwards the original scheme in this header.
+# Railway (and Heroku) terminate TLS at their proxy and forward the original scheme in this header.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-# HTTPS-only cookies on Heroku (DYNO is set there), plain cookies for local runserver.
-SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = 'DYNO' in os.environ
+# HTTPS-only cookies in production, plain cookies for local runserver.
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = IN_PRODUCTION
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
