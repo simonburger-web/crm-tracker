@@ -1,2 +1,2 @@
-web: gunicorn crmtracker.wsgi --log-file -
+web: sh -c 'python manage.py collectstatic --noinput && exec gunicorn crmtracker.wsgi --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2} --timeout 60 --log-file -'
 release: python manage.py migrate
