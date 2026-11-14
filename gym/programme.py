@@ -1,7 +1,8 @@
 """The training programme, defined in code: four days of single-station pairs, ~60 min each.
 
-A lift's working weight is shared wherever it appears (e.g. lat pulldown and cable lateral raise
-on days 1 and 3).
+Weights progress per track: a lift at one rep range. A lift done at the same range on two days shares one
+weight (cable lateral raise, 12–15 on days 1 and 3); at different ranges it gets one weight per range
+(lat pulldown, 6–8 on day 1 and 10–12 on day 3).
 """
 from dataclasses import dataclass
 from decimal import Decimal
@@ -14,13 +15,10 @@ EQUIPMENT = {
     'plates': {'label': 'Plate-loaded', 'increment': Decimal('5')},     # 2.5 kg a side
 }
 
-# How fast each kind of lift should climb, as a share of its working weight per session. The calculator
-# turns this into "sessions at this weight before the next jump": a 5 kg jump on a 140 kg deadlift comes
-# round far sooner than a 2 kg jump on 12 kg curls.
 KINDS = {
-    'main': {'label': 'Main lift', 'rate': Decimal('0.025')},
-    'compound': {'label': 'Compound', 'rate': Decimal('0.02')},
-    'isolation': {'label': 'Isolation', 'rate': Decimal('0.015')},
+    'main': {'label': 'Main lift'},
+    'compound': {'label': 'Compound'},
+    'isolation': {'label': 'Isolation'},
 }
 
 BAR_KG = Decimal('20')
@@ -43,9 +41,6 @@ class Lift:
     def equipment_label(self):
         return EQUIPMENT[self.equipment]['label']
 
-    @property
-    def rate(self):
-        return KINDS[self.kind]['rate']
 
 
 @dataclass(frozen=True)
@@ -59,6 +54,10 @@ class Slot:
     rest_seconds: int = 0
     group: str = ''     # 'A1', 'A2'… for pairs done back to back
     per_leg: bool = False
+
+    @property
+    def track(self):
+        return _TRACK_BY_RANGE[(self.lift.slug, self.low, self.high)]
 
     @property
     def target(self):
@@ -140,3 +139,40 @@ DAYS = [
     )),
 ]
 DAYS_BY_SLUG = {d.slug: d for d in DAYS}
+
+
+@dataclass(frozen=True)
+class Track:
+    """One weight that progresses: a lift at one rep range."""
+    key: str
+    lift: Lift
+    low: int
+    high: int
+    split: bool  # the same lift is also done at another rep range
+
+    @property
+    def name(self):
+        return f'{self.lift.name} ({self.low}–{self.high})' if self.split else self.lift.name
+
+    @property
+    def increment(self):
+        return self.lift.increment
+
+
+def _tracks():
+    ranges = {}
+    for d in DAYS:
+        for s in d.slots:
+            seen = ranges.setdefault(s.lift.slug, [])
+            if (s.low, s.high) not in seen:
+                seen.append((s.low, s.high))
+    tracks = {}
+    for slug, lift in LIFTS.items():  # in LIFTS order; the first range keeps the plain slug (and its old weight)
+        for i, (low, high) in enumerate(ranges.get(slug, [])):
+            key = slug if i == 0 else f'{slug}_{low}_{high}'
+            tracks[key] = Track(key, lift, low, high, len(ranges[slug]) > 1)
+    return tracks
+
+
+TRACKS = _tracks()
+_TRACK_BY_RANGE = {(t.lift.slug, t.low, t.high): t for t in TRACKS.values()}

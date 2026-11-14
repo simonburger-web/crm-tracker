@@ -1,30 +1,38 @@
-"""The overload calculator. Working weights are locked; the app raises them, not the lifter.
+"""Double progression over a rep range (e.g. 3 × 6–8).
 
-Each completed session at a weight counts toward the next jump. How many sessions that takes depends on
-the lift: the kit's smallest jump compared with how fast that kind of lift should climb at that weight.
+Within a session each set's weight follows the set before it: top of the range -> one jump up; in the range
+-> same weight; under the bottom -> one jump down. Next session starts at the heaviest weight that held (got
+at least the bottom of the range), and one jump above that once every set at it reached the top.
 """
-import math
-
 from .programme import BAR_KG, PLATES_KG
 
-MIN_SESSIONS = 1
-MAX_SESSIONS = 8
+
+def next_set_weight(track, weight, reps):
+    """Suggested weight for the set after one of `reps` at `weight`."""
+    if weight is None or reps is None:
+        return weight
+    if reps >= track.high:
+        return weight + track.increment
+    if reps < track.low:
+        return max(weight - track.increment, 0)
+    return weight
 
 
-def sessions_needed(lift, weight):
-    """Sessions to complete at `weight` before adding one increment."""
-    if not weight:
-        return MIN_SESSIONS
-    sessions = math.ceil(lift.increment / (weight * lift.rate))
-    return max(MIN_SESSIONS, min(MAX_SESSIONS, sessions))
+def top_weight(track, sets):
+    """The heaviest weight that held, or the heaviest tried if none did. `sets` is [(weight, reps)]."""
+    held = [w for w, r in sets if r >= track.low]
+    return max(held or [w for w, _ in sets])
 
 
-def after_session(lift, weight, sessions):
-    """Count one completed session; return (weight, sessions at it, went up?)."""
-    sessions += 1
-    if sessions >= sessions_needed(lift, weight):
-        return weight + lift.increment, 0, True
-    return weight, sessions, False
+def next_start(track, sets):
+    """Set 1's weight for next session, from this session's logged [(weight, reps)]."""
+    held = [w for w, r in sets if r >= track.low]
+    if not held:
+        return max(min(w for w, _ in sets) - track.increment, 0)
+    top = max(held)
+    if all(r >= track.high for w, r in sets if w == top):
+        return top + track.increment
+    return top
 
 
 def plates_per_side(total):

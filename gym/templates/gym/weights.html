@@ -31,8 +31,8 @@
 
 {% block content %}
 <div class="head">
-  <h1>Working weights</h1>
-  <p>Only change these if a weight is too easy or too heavy. A changed weight restarts its count towards the next automatic increase, and every change is logged so the overload rate can be tuned to you later.</p>
+  <h1>Starting weights</h1>
+  <p>The weight set 1 starts at next session. It moves by itself with the reps you log, so only change it if it's clearly off. Every change is logged.</p>
 </div>
 
 <form method="post">
@@ -40,12 +40,12 @@
   <div class="panel">
     {% for r in rows %}
     <div class="row">
-      <div class="name">{{ r.lift.name }}</div>
-      <div class="sub">{{ r.lift.equipment_label }} · jumps of {{ r.increment }} kg{% if r.set %} · {{ r.done }}/{{ r.needed }} sessions done{% endif %}{% if r.edits_after_increase %} · <span style="color:var(--amber)">edited {{ r.edits_after_increase }}× after an increase</span>{% endif %}</div>
+      <div class="name">{{ r.track.name }}</div>
+      <div class="sub">{{ r.track.low }}–{{ r.track.high }} reps · {{ r.lift.equipment_label }} · jumps of {{ r.increment }} kg{% if r.edits_after_increase %} · <span style="color:var(--amber)">edited {{ r.edits_after_increase }}× after an increase</span>{% endif %}</div>
       <div class="weight">
         <button type="button" class="step" data-step="-{{ r.increment }}" aria-label="Less weight">−</button>
         <label>
-          <input type="text" inputmode="decimal" name="w-{{ r.lift.slug }}" value="{{ r.weight }}" data-original="{{ r.weight }}" placeholder="Not set" autocomplete="off">
+          <input type="text" inputmode="decimal" name="w-{{ r.track.key }}" value="{{ r.weight }}" data-original="{{ r.weight }}" placeholder="Not set" autocomplete="off">
           <span class="unit">kg</span>
         </label>
         <button type="button" class="step" data-step="{{ r.increment }}" aria-label="More weight">+</button>

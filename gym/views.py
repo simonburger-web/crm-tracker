@@ -12,8 +12,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import AUTO_COMPLETE, ActiveSession, LiftLog, LiftState, WeightEdit, Workout
-from .programme import DAYS, DAYS_BY_SLUG, KINDS, LIFTS
-from .progression import after_session, plates_per_side, sessions_needed
+from .programme import DAYS, DAYS_BY_SLUG, KINDS, TRACKS
+from .progression import next_set_weight, next_start, plates_per_side, top_weight
 
 # The gym clock: "today" and workout dates are shown in local time, not the server's UTC.
 GYM_TZ = ZoneInfo('Africa/Johannesburg')
@@ -60,19 +60,64 @@ def _parse_weight(raw):
     return value if value >= 0 else None
 
 
-def _progress(lift, state):
-    """Where a lift stands on its way to the next automatic increase."""
+def _parse_reps(raw):
+    raw = (raw or '').strip()
+    return int(raw) if raw.isdigit() and int(raw) <= 100 else None
+
+
+def _logged(entries):
+    """[(weight, reps)] for the sets with both filled in."""
+    out = []
+    for e in entries or []:
+        weight, reps = _parse_weight((e or {}).get('w')), (e or {}).get('r')
+        if weight is not None and isinstance(reps, int):
+            out.append((weight, reps))
+    return out
+
+
+def _sets_text(entries):
+    """'60×8 · 62.5×6 · 62.5×6'."""
+    return ' · '.join(f'{_fmt(w)}×{r}' for w, r in _logged(entries))
+
+
+def _last_logs(keys=None):
+    """The latest LiftLog with sets for each track key."""
+    logs = LiftLog.objects.select_related('workout').order_by('-workout__completed_at', '-pk')
+    if keys is not None:
+        logs = logs.filter(slug__in=keys)
+    latest = {}
+    for log in logs:
+        if log.sets and log.slug not in latest:
+            latest[log.slug] = log
+    return latest
+
+
+def _progress(track, state, last=None):
+    """Where a track stands: the weight set 1 starts at, and what was done last time."""
+    lift = track.lift
     weight = state.weight if state else None
-    if weight is None:
-        return {'lift': lift, 'weight': '', 'set': False, 'increment': _fmt(lift.increment)}
-    needed = sessions_needed(lift, weight)
-    done = state.sessions
-    return {
-        'lift': lift, 'set': True, 'weight': _fmt(weight), 'next_weight': _fmt(weight + lift.increment),
-        'increment': _fmt(lift.increment), 'done': done, 'needed': needed, 'left': needed - done,
-        'dots': [i < done for i in range(needed)],
-        'plates': [_fmt(p) for p in plates_per_side(weight) or []] if lift.equipment == 'barbell' else None,
-    }
+    row = {'track': track, 'lift': lift, 'increment': _fmt(lift.increment), 'set': weight is not None,
+           'weight': _fmt(weight), 'last': _sets_text(last.sets) if last else '',
+           'sessions': state.sessions if state else 0}
+    if weight is not None and lift.equipment == 'barbell':
+        row['plates'] = [_fmt(p) for p in plates_per_side(weight) or []]
+    return row
+
+
+def _set_rows(slot, state, saved):
+    """Each set's weight and reps for the day page. A set not yet weighed follows the set before it."""
+    track = slot.track
+    rows = []
+    prev_w, prev_r = (state.weight if state else None), None
+    for i in range(slot.sets):
+        entry = (saved[i] if i < len(saved) else None) or {}
+        weight, reps = _parse_weight(entry.get('w')), entry.get('r')
+        chosen = weight is not None
+        if not chosen:
+            weight = prev_w if i == 0 else next_set_weight(track, prev_w, prev_r)
+        rows.append({'n': i + 1, 'weight': _fmt(weight), 'reps': reps if reps is not None else '', 'chosen': chosen})
+        prev_w, prev_r = weight, reps
+    return rows
 
 
 @_gym_view
@@ -85,8 +130,8 @@ def home(request):
     for slug, completed_at in Workout.objects.values_list('day', 'completed_at'):
         last_by_day.setdefault(slug, completed_at)
 
-    states = _states()
-    lifts = [_progress(lift, states.get(lift.slug)) for lift in LIFTS.values()]
+    states, last = _states(), _last_logs()
+    lifts = [_progress(t, states.get(t.key), last.get(t.key)) for t in TRACKS.values()]
     days = [{'day': d, 'last': last_by_day.get(d.slug), 'is_next': d == up_next} for d in DAYS]
     return render(request, 'gym/home.html', {
         'days': days, 'up_next': up_next, 'lifts': lifts, 'workouts': workouts,
@@ -108,10 +153,14 @@ def day(request, day):
 
     session = ActiveSession.objects.first()
     here = session is not None and session.day == programme_day.slug
-    pending = session.pending_weights if here else {}
+    saved = session.sets if here else {}
     states = _states()
-    cards = [{'slot': slot, 'pending': pending.get(slot.lift.slug, ''), **_progress(slot.lift, states.get(slot.lift.slug))}
-             for slot in programme_day.slots]
+    last = _last_logs([slot.track.key for slot in programme_day.slots])
+    cards = []
+    for slot in programme_day.slots:
+        key = slot.track.key
+        cards.append({'slot': slot, 'key': key, 'rows': _set_rows(slot, states.get(key), saved.get(key) or []),
+                      **_progress(slot.track, states.get(key), last.get(key))})
     last_done = Workout.objects.filter(day=programme_day.slug).first()
     return render(request, 'gym/day.html', {
         'day': programme_day, 'cards': cards, 'last_done': last_done, 'days': DAYS,
@@ -123,7 +172,7 @@ def day(request, day):
 
 
 def _start_day(request, programme_day):
-    """Start this day, replacing any other day in progress, and keep the first-time weights posted with it.
+    """Start this day, replacing any other day in progress, and keep the sets posted with it.
     An autosave only ever updates this day's running session: a page left open must not start a new one."""
     autosave = 'autosave' in request.POST
     with transaction.atomic():
@@ -137,14 +186,21 @@ def _start_day(request, programme_day):
                 return HttpResponse(status=204)
             session = ActiveSession(day=programme_day.slug, started_at=timezone.now())
         for slot in programme_day.slots:
-            raw = request.POST.get(f'w-{slot.lift.slug}')
-            if raw is None:
+            key = slot.track.key
+            names = [(f's-{key}-{i}-w', f's-{key}-{i}-r') for i in range(slot.sets)]
+            if not any(w in request.POST or r in request.POST for w, r in names):
                 continue
-            value = _parse_weight(raw)
-            if value is None:
-                session.pending_weights.pop(slot.lift.slug, None)
+            entries = []
+            for w_name, r_name in names:
+                weight, reps = _parse_weight(request.POST.get(w_name)), _parse_reps(request.POST.get(r_name))
+                entries.append(None if weight is None and reps is None
+                               else {'w': None if weight is None else str(weight), 'r': reps})
+            while entries and entries[-1] is None:
+                entries.pop()
+            if entries:
+                session.sets[key] = entries
             else:
-                session.pending_weights[slot.lift.slug] = str(value)
+                session.sets.pop(key, None)
         session.save()
     if autosave:
         return HttpResponse(status=204)
@@ -165,31 +221,35 @@ def _complete_day(request, programme_day, session):
     # Dated by when the session ran, however much later the app was next opened.
     workout = Workout.objects.create(day=programme_day.slug, completed_at=session.counts_at)
     states = {s.slug: s for s in LiftState.objects.select_for_update()}
-    ups = []
+    changes, logged_any = [], False
     for slot in programme_day.slots:
-        lift = slot.lift
-        state = states.get(lift.slug) or LiftState(slug=lift.slug)
+        track = slot.track
+        sets = _logged(session.sets.get(track.key))
+        if not sets:
+            continue  # nothing logged: the weight stays as it was
+        logged_any = True
+        state = states.get(track.key) or LiftState(slug=track.key)
         prev_weight, prev_sessions = state.weight, state.sessions
-        if state.weight is None:
-            # First time: lock in the weight entered on the day page.
-            state.weight, state.sessions = _parse_weight(session.pending_weights.get(lift.slug)), 0
-            if state.weight is None:
-                continue
-        weight = state.weight
-        state.weight, state.sessions, went_up = after_session(lift, weight, state.sessions)
+        new = next_start(track, sets)
+        base = prev_weight if prev_weight is not None else sets[0][0]
+        outcome = 'up' if new > base else 'down' if new < base else 'hold'
+        state.sessions = prev_sessions + 1 if new == prev_weight else 0
+        state.weight = new
         state.save()
-        states[lift.slug] = state
+        states[track.key] = state
         LiftLog.objects.create(
-            workout=workout, slug=lift.slug, weight=weight, outcome='up' if went_up else 'hold',
-            next_weight=state.weight, prev_weight=prev_weight, prev_sessions=prev_sessions,
+            workout=workout, slug=track.key, weight=top_weight(track, sets), outcome=outcome, next_weight=new,
+            sets=[{'w': str(w), 'r': r} for w, r in sets], prev_weight=prev_weight, prev_sessions=prev_sessions,
         )
-        if went_up:
-            ups.append(f'{lift.name} {_fmt(weight)} → {_fmt(state.weight)} kg')
+        if outcome != 'hold':
+            changes.append(f'{track.name} {_fmt(base)} → {_fmt(new)} kg')
 
-    if ups:
-        messages.success(request, f'{programme_day.short} counted. Weight goes up: ' + '; '.join(ups) + '.')
-    else:
+    if changes:
+        messages.success(request, f'{programme_day.short} counted. Next time: ' + '; '.join(changes) + '.')
+    elif logged_any:
         messages.success(request, f'{programme_day.short} counted. Same weights next time.')
+    else:
+        messages.success(request, f'{programme_day.short} counted. No sets were logged, so weights stay the same.')
 
 
 @require_POST
@@ -203,36 +263,36 @@ def cancel_session(request):
 
 @_gym_view
 def weights(request):
-    """Manual override for the locked working weights; changing one restarts its session count."""
+    """Manual override for the weight each track starts at next session."""
     states = _states()
     if request.method == 'POST':
         changed = []
         with transaction.atomic():
-            for lift in LIFTS.values():
-                new = _parse_weight(request.POST.get(f'w-{lift.slug}'))
-                state = states.get(lift.slug) or LiftState(slug=lift.slug)
+            for track in TRACKS.values():
+                new = _parse_weight(request.POST.get(f'w-{track.key}'))
+                state = states.get(track.key) or LiftState(slug=track.key)
                 if new is None or new == state.weight:
                     continue
                 if state.weight is not None:
-                    last_up = LiftLog.objects.filter(slug=lift.slug, outcome='up').order_by('-workout__completed_at').first()
-                    last_edit = WeightEdit.objects.filter(slug=lift.slug).first()
+                    last_up = LiftLog.objects.filter(slug=track.key, outcome='up').order_by('-workout__completed_at').first()
+                    last_edit = WeightEdit.objects.filter(slug=track.key).first()
                     WeightEdit.objects.create(
-                        slug=lift.slug, old_weight=state.weight, new_weight=new,
+                        slug=track.key, old_weight=state.weight, new_weight=new,
                         after_increase=bool(last_up and (not last_edit or last_up.workout.completed_at > last_edit.edited_at)),
-                        sessions_at_weight=state.sessions, sessions_needed=sessions_needed(lift, state.weight),
+                        sessions_at_weight=state.sessions,
                     )
                 state.weight, state.sessions = new, 0
                 state.save()
-                changed.append(f'{lift.name} {_fmt(new)} kg')
+                changed.append(f'{track.name} {_fmt(new)} kg')
         if changed:
-            messages.success(request, 'Working weights updated: ' + '; '.join(changed) + '.')
+            messages.success(request, 'Starting weights updated: ' + '; '.join(changed) + '.')
         return redirect('gym:home')
 
     edits = {}
     for slug, after_increase in WeightEdit.objects.values_list('slug', 'after_increase'):
         edits[slug] = edits.get(slug, 0) + after_increase
-    rows = [{**_progress(lift, states.get(lift.slug)), 'edits_after_increase': edits.get(lift.slug, 0)}
-            for lift in LIFTS.values()]
+    rows = [{**_progress(t, states.get(t.key)), 'edits_after_increase': edits.get(t.key, 0)}
+            for t in TRACKS.values()]
     return render(request, 'gym/weights.html', {'rows': rows})
 
 
@@ -255,9 +315,10 @@ def undo_last(request):
 
 @_gym_view
 def lift(request, slug):
-    lift_def = LIFTS.get(slug)
-    if lift_def is None:
+    track = TRACKS.get(slug)
+    if track is None:
         raise Http404
+    lift_def = track.lift
     logs = list(LiftLog.objects.filter(slug=slug).select_related('workout'))
     state = LiftState.objects.filter(slug=slug).first()
 
@@ -276,11 +337,12 @@ def lift(request, slug):
         chart = {'w': w, 'h': h, 'points': ' '.join(f'{x},{y}' for x, y in coords), 'last': coords[-1],
                  'lo': _fmt(lo), 'hi': _fmt(hi)}
 
-    rows = [{'log': log, 'weight': _fmt(log.weight), 'next': _fmt(log.next_weight)} for log in reversed(logs)]
+    rows = [{'log': log, 'weight': _fmt(log.weight), 'next': _fmt(log.next_weight), 'sets': _sets_text(log.sets)}
+            for log in reversed(logs)]
     edits = [{'edit': e, 'old': _fmt(e.old_weight), 'new': _fmt(e.new_weight)}
              for e in WeightEdit.objects.filter(slug=slug)]
     return render(request, 'gym/lift.html', {
-        'lift': lift_def, 'progress': _progress(lift_def, state), 'rows': rows, 'chart': chart, 'edits': edits,
+        'lift': lift_def, 'track': track, 'progress': _progress(track, state), 'rows': rows, 'chart': chart, 'edits': edits,
         'edits_after_increase': sum(e['edit'].after_increase for e in edits),
         'kind_label': KINDS[lift_def.kind]['label'],
     })

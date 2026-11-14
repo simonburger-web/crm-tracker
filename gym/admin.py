@@ -26,6 +26,5 @@ class LiftStateAdmin(admin.ModelAdmin):
 
 @admin.register(WeightEdit)
 class WeightEditAdmin(admin.ModelAdmin):
-    list_display = ('slug', 'edited_at', 'old_weight', 'new_weight', 'after_increase', 'sessions_at_weight',
-                    'sessions_needed')
+    list_display = ('slug', 'edited_at', 'old_weight', 'new_weight', 'after_increase', 'sessions_at_weight')
     list_filter = ('slug', 'after_increase')

@@ -10,8 +10,8 @@ AUTO_COMPLETE = timedelta(minutes=90)
 
 
 class LiftState(models.Model):
-    """The locked working weight for one lift (slug from programme.LIFTS); only the calculator or the
-    edit-weights page changes it."""
+    """The weight set 1 starts at next session, for one track (key from programme.TRACKS). Set from the reps
+    logged each session, or by hand on the edit-weights page."""
     slug = models.SlugField(max_length=50, unique=True)
     weight = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     sessions = models.PositiveSmallIntegerField(default=0)  # completed at this weight since it last changed
@@ -25,8 +25,8 @@ class ActiveSession(models.Model):
     """A started programme day that hasn't counted yet. Becomes a Workout once AUTO_COMPLETE has passed."""
     day = models.SlugField(max_length=10)
     started_at = models.DateTimeField()
-    # First-time weights entered during the session ({lift slug: '80'}); they lock in when it counts.
-    pending_weights = models.JSONField(default=dict, blank=True)
+    # Sets logged so far: {track key: [{'w': '60', 'r': 8}, None, ...]}, one entry per set in order.
+    sets = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-started_at', '-pk']
@@ -56,12 +56,13 @@ class Workout(models.Model):
 
 
 class LiftLog(models.Model):
-    """What was done for one lift in a workout, plus the state before it so the workout can be undone."""
-    OUTCOME_CHOICES = [('up', 'Weight up'), ('hold', 'Hold')]
+    """What was done for one track in a workout, plus the state before it so the workout can be undone."""
+    OUTCOME_CHOICES = [('up', 'Weight up'), ('hold', 'Hold'), ('down', 'Weight down')]
 
     workout = models.ForeignKey(Workout, on_delete=models.CASCADE, related_name='logs')
     slug = models.SlugField(max_length=50)
-    weight = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    weight = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)  # heaviest that held
+    sets = models.JSONField(default=list, blank=True)  # [{'w': '60', 'r': 8}, ...]
     outcome = models.CharField(max_length=10, choices=OUTCOME_CHOICES, default='hold')
     next_weight = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     prev_weight = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
@@ -72,7 +73,7 @@ class LiftLog(models.Model):
 
 
 class WeightEdit(models.Model):
-    """A manual override on the edit-weights page: the data for tuning each lift's overload rate later."""
+    """A manual override on the edit-weights page."""
     slug = models.SlugField(max_length=50, db_index=True)
     edited_at = models.DateTimeField(auto_now_add=True)
     old_weight = models.DecimalField(max_digits=6, decimal_places=2)
@@ -80,7 +81,6 @@ class WeightEdit(models.Model):
     # The weight being replaced was set by an automatic increase (not by an earlier manual edit).
     after_increase = models.BooleanField(default=False)
     sessions_at_weight = models.PositiveSmallIntegerField(default=0)  # completed at old_weight before the edit
-    sessions_needed = models.PositiveSmallIntegerField(default=0)     # calculator's target at old_weight
 
     class Meta:
         ordering = ['-edited_at', '-pk']

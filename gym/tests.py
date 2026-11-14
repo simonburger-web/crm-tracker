@@ -6,28 +6,38 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import AUTO_COMPLETE, ActiveSession, LiftLog, LiftState, WeightEdit, Workout
-from .programme import LIFTS
-from .progression import after_session, plates_per_side, sessions_needed
+from .programme import DAYS_BY_SLUG, TRACKS
+from .progression import next_set_weight, next_start, plates_per_side, top_weight
 
 D = Decimal
 
 
-class CalculatorTests(TestCase):
-    def test_sessions_needed_differs_per_lift(self):
-        self.assertEqual(sessions_needed(LIFTS['bench'], D('80')), 3)       # 5 kg is 6% of 80
-        self.assertEqual(sessions_needed(LIFTS['bench'], D('100')), 2)      # heavier -> jumps come sooner
-        self.assertEqual(sessions_needed(LIFTS['deadlift'], D('140')), 2)
-        self.assertEqual(sessions_needed(LIFTS['ohp'], D('50')), 4)
-        self.assertEqual(sessions_needed(LIFTS['incline_db_press'], D('26')), 4)
-        self.assertEqual(sessions_needed(LIFTS['cable_lateral_raise'], D('10')), 8)  # capped
+class ProgressionTests(TestCase):
+    def test_next_set_follows_the_set_before(self):
+        rows = TRACKS['lat_pulldown']  # 3 × 6–8, stack, 2.5 kg jumps
+        self.assertEqual(next_set_weight(rows, D('60'), 8), D('62.5'))   # top of range: up
+        self.assertEqual(next_set_weight(rows, D('60'), 7), D('60'))     # in range: same
+        self.assertEqual(next_set_weight(rows, D('60'), 6), D('60'))
+        self.assertEqual(next_set_weight(rows, D('60'), 5), D('57.5'))   # under: drop
+        self.assertEqual(next_set_weight(rows, D('60'), None), D('60'))  # reps not in yet
 
-    def test_weight_goes_up_by_kit_increment_once_sessions_are_done(self):
-        bench = LIFTS['bench']
-        self.assertEqual(after_session(bench, D('80'), 0), (D('80'), 1, False))
-        self.assertEqual(after_session(bench, D('80'), 1), (D('80'), 2, False))
-        self.assertEqual(after_session(bench, D('80'), 2), (D('85'), 0, True))
-        self.assertEqual(after_session(LIFTS['incline_db_press'], D('26'), 3), (D('28'), 0, True))
-        self.assertEqual(after_session(LIFTS['cable_lateral_raise'], D('10'), 7), (D('12.5'), 0, True))
+    def test_next_session_starts_at_heaviest_that_held(self):
+        t = TRACKS['lat_pulldown']
+        self.assertEqual(next_start(t, [(D('60'), 8), (D('62.5'), 6), (D('62.5'), 6)]), D('62.5'))
+        self.assertEqual(next_start(t, [(D('62.5'), 8), (D('62.5'), 8), (D('62.5'), 8)]), D('65'))
+        self.assertEqual(next_start(t, [(D('60'), 8), (D('62.5'), 5), (D('60'), 7)]), D('60'))
+        self.assertEqual(next_start(t, [(D('60'), 5), (D('60'), 4)]), D('57.5'))    # nothing held: drop
+        self.assertEqual(top_weight(t, [(D('60'), 8), (D('62.5'), 5)]), D('60'))
+
+    def test_a_lift_at_two_rep_ranges_gets_two_weights(self):
+        day1 = next(s for s in DAYS_BY_SLUG['day1'].slots if s.lift.slug == 'lat_pulldown')
+        day3 = next(s for s in DAYS_BY_SLUG['day3'].slots if s.lift.slug == 'lat_pulldown')
+        self.assertEqual((day1.track.key, day3.track.key), ('lat_pulldown', 'lat_pulldown_10_12'))
+        self.assertEqual(day3.track.name, 'Lat pulldown (10–12)')
+        # Same range on both days: one shared weight.
+        lat_raises = [s.track.key for d in ('day1', 'day3') for s in DAYS_BY_SLUG[d].slots
+                      if s.lift.slug == 'cable_lateral_raise']
+        self.assertEqual(lat_raises, ['cable_lateral_raise', 'cable_lateral_raise'])
 
     def test_plate_calculator(self):
         # No 25s or 15s at this gym.
@@ -35,6 +45,15 @@ class CalculatorTests(TestCase):
         self.assertEqual(plates_per_side(D('85')), [D('20'), D('10'), D('2.5')])
         self.assertEqual(plates_per_side(D('20')), [])
         self.assertIsNone(plates_per_side(D('15')))
+
+
+def sets(key, *pairs):
+    """POST fields for a track's sets: sets('bench', ('80', 6), ('80', 5))."""
+    fields = {}
+    for i, (w, r) in enumerate(pairs):
+        fields[f's-{key}-{i}-w'] = w
+        fields[f's-{key}-{i}-r'] = '' if r is None else str(r)
+    return fields
 
 
 class GymViewTests(TestCase):
@@ -62,18 +81,32 @@ class GymViewTests(TestCase):
     def test_crm_sidebar_links_to_gym(self):
         self.assertContains(self.client.get(reverse('dashboard')), reverse('gym:home'))
 
-    def test_first_session_locks_weights_then_raises_them_automatically(self):
-        self.complete('day1', **{'w-bench': '80'})
-        self.assertEqual((self.state('bench').weight, self.state('bench').sessions), (D('80'), 1))
-        self.assertFalse(LiftState.objects.filter(slug='rope_pushdown').exists())  # no weight entered: skipped
+    def test_logged_sets_set_next_sessions_start(self):
+        LiftState.objects.create(slug='lat_pulldown', weight=D('60'))
+        response = self.complete('day1', **sets('lat_pulldown', ('60', 8), ('62.5', 6), ('62.5', 6)),
+                                 **sets('bench', ('80', 6), ('80', 6), ('80', 6), ('80', 6)))
+        self.assertEqual(self.state('lat_pulldown').weight, D('62.5'))
+        self.assertEqual(self.state('bench').weight, D('85'))  # first time, every set at the top of 5–6
+        self.assertFalse(LiftState.objects.filter(slug='rope_pushdown').exists())  # nothing logged: skipped
+        self.assertContains(response, 'Lat pulldown (6–8) 60 → 62.5 kg')
+        log = LiftLog.objects.get(slug='lat_pulldown')
+        self.assertEqual((log.weight, log.outcome, log.next_weight), (D('62.5'), 'up', D('62.5')))
+        self.assertEqual(log.sets, [{'w': '60', 'r': 8}, {'w': '62.5', 'r': 6}, {'w': '62.5', 'r': 6}])
 
-        # Locked: a posted weight is ignored once one is set.
-        self.complete('day1', **{'w-bench': '200'})
-        self.assertEqual((self.state('bench').weight, self.state('bench').sessions), (D('80'), 2))
-        response = self.complete('day1')
-        self.assertEqual((self.state('bench').weight, self.state('bench').sessions), (D('85'), 0))
-        self.assertEqual(LiftLog.objects.filter(slug='bench', outcome='up').count(), 1)
-        self.assertContains(response, 'Bench press 80 → 85 kg')
+        self.complete('day1', **sets('lat_pulldown', ('62.5', 7), ('62.5', 6), ('62.5', 6)))
+        self.assertEqual((self.state('lat_pulldown').weight, self.state('lat_pulldown').sessions), (D('62.5'), 1))
+        self.assertEqual(LiftLog.objects.filter(slug='lat_pulldown').last().outcome, 'hold')
+        self.complete('day1', **sets('lat_pulldown', ('62.5', 5), ('60', 6)))  # only the drop set held
+        self.assertEqual(self.state('lat_pulldown').weight, D('60'))
+        self.assertEqual(LiftLog.objects.filter(slug='lat_pulldown').last().outcome, 'down')
+
+    def test_day_page_fills_each_set_from_the_one_before(self):
+        LiftState.objects.create(slug='lat_pulldown', weight=D('60'))
+        url = reverse('gym:day', args=['day1'])
+        self.start('day1', **sets('lat_pulldown', ('60', 8)))
+        rows = next(c for c in self.client.get(url).context['cards'] if c['key'] == 'lat_pulldown')['rows']
+        self.assertEqual([(r['weight'], r['reps'], r['chosen']) for r in rows],
+                         [('60', 8, True), ('62.5', '', False), ('62.5', '', False)])
 
     def test_viewing_a_day_does_not_start_it(self):
         self.client.get(reverse('gym:day', args=['day1']))
@@ -92,7 +125,7 @@ class GymViewTests(TestCase):
         self.run_out_the_clock()
         self.assertContains(self.client.get(reverse('gym:home')), 'Day 1 counted')
         self.assertEqual(Workout.objects.filter(day='day1').count(), 1)
-        self.assertEqual(self.state('bench').sessions, 1)
+        self.assertEqual(self.state('bench').weight, D('80'))  # nothing logged: unchanged
         self.assertFalse(ActiveSession.objects.exists())
 
         # Counted once, however many pages open afterwards.
@@ -139,31 +172,32 @@ class GymViewTests(TestCase):
         self.client.get(reverse('gym:home'))
         self.assertEqual(list(Workout.objects.values_list('day', flat=True)), ['day2'])
 
-    def test_weights_entered_during_a_session_lock_in_when_it_counts(self):
+    def test_sets_autosave_during_a_session(self):
         url = reverse('gym:day', args=['day1'])
         self.start('day1')
-        self.assertEqual(self.client.post(url, {'autosave': '1', 'w-bench': '800'}).status_code, 204)
-        self.client.post(url, {'autosave': '1', 'w-bench': '80'})  # typo corrected
+        self.assertEqual(self.client.post(url, {'autosave': '1', **sets('bench', ('800', 6))}).status_code, 204)
+        self.client.post(url, {'autosave': '1', **sets('bench', ('80', 6), ('', None))})  # typo corrected
+        self.assertEqual(ActiveSession.objects.get().sets, {'bench': [{'w': '80', 'r': 6}]})
         self.assertFalse(LiftState.objects.filter(slug='bench').exists())
         self.assertContains(self.client.get(url), 'value="80"')
 
         self.run_out_the_clock()
         self.client.get(reverse('gym:home'))
-        self.assertEqual((self.state('bench').weight, self.state('bench').sessions), (D('80'), 1))
+        self.assertEqual(self.state('bench').weight, D('85'))
 
     def test_autosave_from_a_stale_page_never_starts_a_session(self):
         url = reverse('gym:day', args=['day1'])
-        self.assertEqual(self.client.post(url, {'autosave': '1', 'w-bench': '80'}).status_code, 204)
+        self.assertEqual(self.client.post(url, {'autosave': '1', **sets('bench', ('80', 6))}).status_code, 204)
         self.assertFalse(ActiveSession.objects.exists())
 
         self.start('day2')
-        self.client.post(url, {'autosave': '1', 'w-bench': '80'})
+        self.client.post(url, {'autosave': '1', **sets('bench', ('80', 6))})
         session = ActiveSession.objects.get()
-        self.assertEqual((session.day, session.pending_weights), ('day2', {}))
+        self.assertEqual((session.day, session.sets), ('day2', {}))
 
     def test_undo_restores_weight_and_count(self):
         LiftState.objects.create(slug='bench', weight=D('80'), sessions=2)
-        self.complete('day1')
+        self.complete('day1', **sets('bench', ('80', 6), ('80', 6), ('80', 6), ('80', 6)))
         self.assertEqual(self.state('bench').weight, D('85'))
         self.client.post(reverse('gym:undo'))
         self.assertEqual((self.state('bench').weight, self.state('bench').sessions), (D('80'), 2))
@@ -180,14 +214,15 @@ class GymViewTests(TestCase):
 
     def test_edits_are_logged_and_flag_whether_the_app_had_just_raised_the_weight(self):
         LiftState.objects.create(slug='bench', weight=D('80'), sessions=2)
-        self.complete('day1')                                    # app raises bench to 85
-        self.complete('day1')                                    # one session at 85
+        top = sets('bench', ('80', 6), ('80', 6), ('80', 6), ('80', 6))
+        self.complete('day1', **top)                             # all at the top: bench goes to 85
+        self.complete('day1', **sets('bench', ('85', 5), ('85', 5), ('85', 5), ('85', 5)))  # held at 85
         self.client.post(reverse('gym:weights'), {'w-bench': '80', 'w-deadlift': '140'})
         self.client.post(reverse('gym:weights'), {'w-bench': '82.5'})
 
         second, first = WeightEdit.objects.filter(slug='bench')
         self.assertEqual((first.old_weight, first.new_weight, first.after_increase), (D('85'), D('80'), True))
-        self.assertEqual((first.sessions_at_weight, first.sessions_needed), (1, 3))
+        self.assertEqual(first.sessions_at_weight, 1)
         self.assertEqual((second.old_weight, second.new_weight, second.after_increase), (D('80'), D('82.5'), False))
         self.assertFalse(WeightEdit.objects.filter(slug='deadlift').exists())  # first-time set, not an edit
         self.assertContains(self.client.get(reverse('gym:lift', args=['bench'])), '1 after an increase')
