@@ -30,14 +30,14 @@ class ProgressionTests(TestCase):
         self.assertEqual(top_weight(t, [(D('60'), 8), (D('62.5'), 5)]), D('60'))
 
     def test_a_lift_at_two_rep_ranges_gets_two_weights(self):
-        day1 = next(s for s in DAYS_BY_SLUG['day1'].slots if s.lift.slug == 'lat_pulldown')
-        day3 = next(s for s in DAYS_BY_SLUG['day3'].slots if s.lift.slug == 'lat_pulldown')
-        self.assertEqual((day1.track.key, day3.track.key), ('lat_pulldown', 'lat_pulldown_10_12'))
-        self.assertEqual(day3.track.name, 'Lat pulldown (10–12)')
+        day2 = next(s for s in DAYS_BY_SLUG['day2'].slots if s.lift.slug == 'back_squat')
+        day4 = next(s for s in DAYS_BY_SLUG['day4'].slots if s.lift.slug == 'back_squat')
+        self.assertEqual((day2.track.key, day4.track.key), ('back_squat', 'back_squat_8_8'))
+        self.assertEqual((day2.track.name, day4.track.name), ('Belt back squat (5–6)', 'Belt back squat (8)'))
         # Same range on both days: one shared weight.
-        lat_raises = [s.track.key for d in ('day1', 'day3') for s in DAYS_BY_SLUG[d].slots
-                      if s.lift.slug == 'cable_lateral_raise']
-        self.assertEqual(lat_raises, ['cable_lateral_raise', 'cable_lateral_raise'])
+        pulldowns = [s.track.key for d in ('day1', 'day3') for s in DAYS_BY_SLUG[d].slots
+                     if s.lift.slug == 'lat_pulldown']
+        self.assertEqual(pulldowns, ['lat_pulldown', 'lat_pulldown'])
 
     def test_plate_calculator(self):
         # No 25s or 15s at this gym.
@@ -88,7 +88,7 @@ class GymViewTests(TestCase):
         self.assertEqual(self.state('lat_pulldown').weight, D('62.5'))
         self.assertEqual(self.state('bench').weight, D('85'))  # first time, every set at the top of 5–6
         self.assertFalse(LiftState.objects.filter(slug='rope_pushdown').exists())  # nothing logged: skipped
-        self.assertContains(response, 'Lat pulldown (6–8) 60 → 62.5 kg')
+        self.assertContains(response, 'Lat pulldown 60 → 62.5 kg')
         log = LiftLog.objects.get(slug='lat_pulldown')
         self.assertEqual((log.weight, log.outcome, log.next_weight), (D('62.5'), 'up', D('62.5')))
         self.assertEqual(log.sets, [{'w': '60', 'r': 8}, {'w': '62.5', 'r': 6}, {'w': '62.5', 'r': 6}])

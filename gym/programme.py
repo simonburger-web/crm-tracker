@@ -1,8 +1,8 @@
 """The training programme, defined in code: four days of single-station pairs, ~60 min each.
 
 Weights progress per track: a lift at one rep range. A lift done at the same range on two days shares one
-weight (cable lateral raise, 12–15 on days 1 and 3); at different ranges it gets one weight per range
-(lat pulldown, 6–8 on day 1 and 10–12 on day 3).
+weight (lat pulldown, 6–8 on days 1 and 3); at different ranges it gets one weight per range
+(belt back squat, 5–6 on day 2 and 8 on day 4).
 """
 from dataclasses import dataclass
 from decimal import Decimal
@@ -14,6 +14,7 @@ EQUIPMENT = {
     'dumbbell': {'label': 'Dumbbells (per hand)', 'increment': Decimal('2')},
     'stack': {'label': 'Weight stack', 'increment': Decimal('2.5')},
     'plates': {'label': 'Plate-loaded', 'increment': Decimal('5')},     # 2.5 kg a side
+    'machine': {'label': 'Machine (per arm)', 'increment': Decimal('2.5')},
 }
 
 KINDS = {
@@ -54,7 +55,7 @@ class Slot:
     rest: str = ''      # shown on the solo lift, or on the last lift of a pair
     rest_seconds: int = 0
     group: str = ''     # 'A1', 'A2'… for pairs done back to back
-    per_leg: bool = False
+    per: str = ''       # 'leg' or 'arm' when the reps are per side
 
     @property
     def track(self):
@@ -63,7 +64,7 @@ class Slot:
     @property
     def target(self):
         reps = f'{self.low}' if self.low == self.high else f'{self.low}–{self.high}'
-        return f'{self.sets} × {reps}{"/leg" if self.per_leg else ""}'
+        return f'{self.sets} × {reps}{f"/{self.per}" if self.per else ""}'
 
 
 def _lifts(*rows):
@@ -82,9 +83,9 @@ LIFTS = _lifts(
     ('leg_press', 'Leg press', 'plates', 'compound'),
     ('standing_calf_raise', 'Standing calf raise', 'stack', 'isolation'),
     ('standing_leg_curl', 'Standing leg curl', 'stack', 'isolation'),
-    ('ohp', 'Overhead press', 'barbell', 'main'),
+    ('ohp', 'Single-arm overhead press machine', 'machine', 'main'),  # was the barbell press; same slug, same weight
     ('lat_pulldown', 'Lat pulldown', 'stack', 'compound'),
-    ('seated_cable_row', 'Seated cable row', 'stack', 'compound'),
+    ('single_arm_row_machine', 'Seated single-arm row machine', 'machine', 'compound'),
     ('cable_fly', 'Cable fly', 'stack', 'isolation'),
     ('bayesian_cable_curl', 'Bayesian cable curl', 'stack', 'isolation'),
     ('db_oh_triceps', 'Seated overhead triceps extension', 'dumbbell', 'isolation'),
@@ -93,8 +94,8 @@ LIFTS = _lifts(
 )
 
 
-def _s(slug, sets, low, high, rest='', rest_seconds=0, group='', per_leg=False):
-    return Slot(LIFTS[slug], sets, low, high, rest, rest_seconds, group, per_leg)
+def _s(slug, sets, low, high, rest='', rest_seconds=0, group='', per=''):
+    return Slot(LIFTS[slug], sets, low, high, rest, rest_seconds, group, per)
 
 
 @dataclass(frozen=True)
@@ -123,13 +124,13 @@ DAYS = [
         _s('standing_leg_curl', 3, 10, 12, '45 s', 45),
     )),
     Day('day3', 'Day 3', 'Upper — Shoulders & Back', (
-        _s('ohp', 4, 6, 8, '2.5 min', 150),
-        _s('lat_pulldown', 3, 10, 12, '75 s', 75),
-        _s('seated_cable_row', 3, 10, 12, '75 s', 75),
-        _s('cable_fly', 3, 12, 15, group='B1'),
-        _s('cable_lateral_raise', 3, 12, 15, '45 s after pair', 45, 'B2'),
-        _s('bayesian_cable_curl', 3, 10, 12, group='C1'),
-        _s('db_oh_triceps', 3, 10, 12, '45 s after pair', 45, 'C2'),
+        _s('ohp', 4, 6, 8, '2.5 min', 150, per='arm'),
+        _s('lat_pulldown', 3, 6, 8, '75 s', 75),
+        _s('single_arm_row_machine', 3, 6, 8, '75 s', 75, per='arm'),
+        _s('cable_fly', 3, 8, 10, group='B1'),
+        _s('cable_lateral_raise', 3, 8, 10, '45 s after pair', 45, 'B2'),
+        _s('bayesian_cable_curl', 3, 6, 8, group='C1'),
+        _s('db_oh_triceps', 3, 6, 8, '45 s after pair', 45, 'C2'),
     )),
     Day('day4', 'Day 4', 'Lower — Trap-bar Deadlift', (
         _s('trap_bar_deadlift', 3, 5, 5, '3 min', 180),
