@@ -206,10 +206,10 @@ class GymViewTests(TestCase):
     def test_edit_weights_overrides_and_restarts_count(self):
         LiftState.objects.create(slug='bench', weight=D('80'), sessions=2)
         LiftState.objects.create(slug='ohp', weight=D('50'), sessions=3)
-        self.client.post(reverse('gym:weights'), {'w-bench': '75', 'w-ohp': '50', 'w-deadlift': '140', 'w-rdl': ''})
+        self.client.post(reverse('gym:weights'), {'w-bench': '75', 'w-ohp': '50', 'w-trap_bar_deadlift': '140', 'w-rdl': ''})
         self.assertEqual((self.state('bench').weight, self.state('bench').sessions), (D('75'), 0))
         self.assertEqual((self.state('ohp').weight, self.state('ohp').sessions), (D('50'), 3))  # unchanged
-        self.assertEqual(self.state('deadlift').weight, D('140'))
+        self.assertEqual(self.state('trap_bar_deadlift').weight, D('140'))
         self.assertFalse(LiftState.objects.filter(slug='rdl').exists())
 
     def test_edits_are_logged_and_flag_whether_the_app_had_just_raised_the_weight(self):
@@ -217,12 +217,12 @@ class GymViewTests(TestCase):
         top = sets('bench', ('80', 6), ('80', 6), ('80', 6), ('80', 6))
         self.complete('day1', **top)                             # all at the top: bench goes to 85
         self.complete('day1', **sets('bench', ('85', 5), ('85', 5), ('85', 5), ('85', 5)))  # held at 85
-        self.client.post(reverse('gym:weights'), {'w-bench': '80', 'w-deadlift': '140'})
+        self.client.post(reverse('gym:weights'), {'w-bench': '80', 'w-trap_bar_deadlift': '140'})
         self.client.post(reverse('gym:weights'), {'w-bench': '82.5'})
 
         second, first = WeightEdit.objects.filter(slug='bench')
         self.assertEqual((first.old_weight, first.new_weight, first.after_increase), (D('85'), D('80'), True))
         self.assertEqual(first.sessions_at_weight, 1)
         self.assertEqual((second.old_weight, second.new_weight, second.after_increase), (D('80'), D('82.5'), False))
-        self.assertFalse(WeightEdit.objects.filter(slug='deadlift').exists())  # first-time set, not an edit
+        self.assertFalse(WeightEdit.objects.filter(slug='trap_bar_deadlift').exists())  # first-time set, not an edit
         self.assertContains(self.client.get(reverse('gym:lift', args=['bench'])), '1 after an increase')

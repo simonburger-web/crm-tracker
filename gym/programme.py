@@ -10,6 +10,7 @@ from decimal import Decimal
 # Smallest jump each kind of kit allows. Dumbbell weights are per hand.
 EQUIPMENT = {
     'barbell': {'label': 'Barbell', 'increment': Decimal('5')},
+    'trap_bar': {'label': 'Trap bar', 'increment': Decimal('5')},      # no plate breakdown: bar weight varies
     'dumbbell': {'label': 'Dumbbells (per hand)', 'increment': Decimal('2')},
     'stack': {'label': 'Weight stack', 'increment': Decimal('2.5')},
     'plates': {'label': 'Plate-loaded', 'increment': Decimal('5')},     # 2.5 kg a side
@@ -75,6 +76,7 @@ LIFTS = _lifts(
     ('incline_db_row', 'Incline DB row', 'dumbbell', 'compound'),
     ('cable_lateral_raise', 'Cable lateral raise', 'stack', 'isolation'),
     ('rope_pushdown', 'Rope pushdown', 'stack', 'isolation'),
+    ('incline_db_curl', 'Incline DB curl', 'dumbbell', 'isolation'),
     ('back_squat', 'Belt back squat', 'barbell', 'main'),
     ('rdl', 'Romanian deadlift', 'barbell', 'compound'),
     ('leg_press', 'Leg press', 'plates', 'compound'),
@@ -86,9 +88,7 @@ LIFTS = _lifts(
     ('cable_fly', 'Cable fly', 'stack', 'isolation'),
     ('bayesian_cable_curl', 'Bayesian cable curl', 'stack', 'isolation'),
     ('db_oh_triceps', 'Seated overhead triceps extension', 'dumbbell', 'isolation'),
-    ('deadlift', 'Deadlift', 'barbell', 'main'),
-    ('front_squat', 'Front squat / pause squat', 'barbell', 'compound'),
-    ('bulgarian_split_squat', 'Bulgarian split squat', 'dumbbell', 'compound'),
+    ('trap_bar_deadlift', 'Trap-bar deadlift', 'trap_bar', 'main'),
     ('leg_extension', 'Leg extension', 'stack', 'isolation'),
 )
 
@@ -113,6 +113,7 @@ DAYS = [
         _s('incline_db_row', 3, 8, 12, '75 s after pair', 75, 'A2'),
         _s('cable_lateral_raise', 4, 12, 15, group='B1'),
         _s('rope_pushdown', 4, 12, 15, '45 s after pair', 45, 'B2'),
+        _s('incline_db_curl', 3, 8, 12, '60 s', 60),
     )),
     Day('day2', 'Day 2', 'Lower — Squat', (
         _s('back_squat', 4, 5, 6, '3 min', 180),
@@ -130,10 +131,10 @@ DAYS = [
         _s('bayesian_cable_curl', 3, 10, 12, group='C1'),
         _s('db_oh_triceps', 3, 10, 12, '45 s after pair', 45, 'C2'),
     )),
-    Day('day4', 'Day 4', 'Lower — Deadlift', (
-        _s('deadlift', 3, 5, 5, '3 min', 180),
-        _s('front_squat', 3, 8, 8, '2 min', 120),
-        _s('bulgarian_split_squat', 3, 8, 10, '60 s', 60, per_leg=True),
+    Day('day4', 'Day 4', 'Lower — Trap-bar Deadlift', (
+        _s('trap_bar_deadlift', 3, 5, 5, '3 min', 180),
+        _s('back_squat', 3, 8, 8, '2 min', 120),
+        _s('leg_press', 3, 10, 12, '75 s', 75),
         _s('leg_extension', 3, 12, 15, group='A1'),
         _s('standing_calf_raise', 3, 12, 15, '45 s after pair', 45, 'A2'),
     )),
@@ -152,7 +153,8 @@ class Track:
 
     @property
     def name(self):
-        return f'{self.lift.name} ({self.low}–{self.high})' if self.split else self.lift.name
+        reps = f'{self.low}' if self.low == self.high else f'{self.low}–{self.high}'
+        return f'{self.lift.name} ({reps})' if self.split else self.lift.name
 
     @property
     def increment(self):
