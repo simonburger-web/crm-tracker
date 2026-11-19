@@ -25,6 +25,8 @@
   .card h3 { font-size: 22px; font-weight: 800; line-height: 1.1; }
   .meta { margin-top: 4px; font-size: 14px; color: var(--muted); }
   .meta b { color: var(--text); font-weight: 600; }
+  .note { margin-top: 6px; font-size: 14px; color: var(--text); }
+  .alt { margin-top: 4px; font-size: 13px; color: var(--lime); }
 
   .last { margin-top: 10px; font-size: 14px; color: var(--muted); }
   .last b { color: var(--text); font-weight: 600; }
@@ -85,8 +87,10 @@
       <div>
         <h3>{% if c.slot.group %}<span class="group">{{ c.slot.group }}</span>{% endif %}{{ c.lift.name }}</h3>
         <div class="meta"><b>{{ c.slot.target }}</b>{% if c.slot.rest %} · rest {{ c.slot.rest }}{% endif %} · {{ c.lift.equipment_label }}</div>
+        {% if c.alt %}<div class="alt">{{ c.alt.label }} · swaps every {{ day.short }} session · next time: {{ c.alt_next.lift.name }} {{ c.alt_next.target }}</div>{% endif %}
+        {% if c.slot.note %}<div class="note">{{ c.slot.note }}</div>{% endif %}
       </div>
-      <a href="{% url 'gym:lift' c.lift.slug %}" class="muted" style="font-size:13px;padding:4px 0 4px 8px;white-space:nowrap">History</a>
+      <a href="{% url 'gym:lift' c.key %}" class="muted" style="font-size:13px;padding:4px 0 4px 8px;white-space:nowrap">History</a>
     </div>
 
     {% if c.last %}<div class="last">Last time: <b>{{ c.last }}</b></div>{% endif %}

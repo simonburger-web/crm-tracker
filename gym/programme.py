@@ -1,4 +1,4 @@
-"""The training programme, defined in code: four days of single-station pairs, ~60 min each.
+"""The training programme, defined in code: four days, ~60 min each.
 
 Weights progress per track: a lift at one rep range. A lift done at the same range on two days shares one
 weight (lat pulldown, 6–8 on days 1 and 3); at different ranges it gets one weight per range
@@ -56,6 +56,7 @@ class Slot:
     rest_seconds: int = 0
     group: str = ''     # 'A1', 'A2'… for pairs done back to back
     per: str = ''       # 'leg' or 'arm' when the reps are per side
+    note: str = ''      # a cue shown on the card
 
     @property
     def track(self):
@@ -91,11 +92,22 @@ LIFTS = _lifts(
     ('db_oh_triceps', 'Seated overhead triceps extension', 'dumbbell', 'isolation'),
     ('trap_bar_deadlift', 'Trap-bar deadlift', 'trap_bar', 'main'),
     ('leg_extension', 'Leg extension', 'stack', 'isolation'),
+    ('seated_leg_curl', 'Seated leg curl', 'stack', 'isolation'),
+    ('bulgarian_split_squat', 'Bulgarian split squat', 'dumbbell', 'compound'),  # same slug as before: history carries over
+    ('seated_calf_raise', 'Seated calf raise', 'stack', 'isolation'),
 )
 
 
-def _s(slug, sets, low, high, rest='', rest_seconds=0, group='', per=''):
-    return Slot(LIFTS[slug], sets, low, high, rest, rest_seconds, group, per)
+def _s(slug, sets, low, high, rest='', rest_seconds=0, group='', per='', note=''):
+    return Slot(LIFTS[slug], sets, low, high, rest, rest_seconds, group, per, note)
+
+
+@dataclass(frozen=True)
+class Alternating:
+    """One spot in a day that takes turns between lifts, one per session, in order. Each option is its own
+    slot and track, so each progresses on its own weight. Whose turn it is: see views._resolve_slots."""
+    label: str
+    options: tuple  # of Slot
 
 
 @dataclass(frozen=True)
@@ -103,7 +115,18 @@ class Day:
     slug: str
     short: str
     title: str
-    slots: tuple
+    slots: tuple  # of Slot or Alternating, in order
+
+    @property
+    def all_slots(self):
+        """Every slot the day can include, with each option of an alternating spot."""
+        out = []
+        for entry in self.slots:
+            out.extend(entry.options if isinstance(entry, Alternating) else (entry,))
+        return tuple(out)
+
+
+CALF_NOTE = '2 s pause in the bottom stretch, last set to failure'
 
 
 DAYS = [
@@ -116,12 +139,16 @@ DAYS = [
         _s('rope_pushdown', 4, 12, 15, '45 s after pair', 45, 'B2'),
         _s('incline_db_curl', 3, 8, 12, '60 s', 60),
     )),
-    Day('day2', 'Day 2', 'Lower — Squat', (
+    # Leg day 2: strength + posterior chain. Rep ranges top out at 10 on both leg days.
+    Day('day2', 'Day 2', 'Lower — Strength & Hinge', (
         _s('back_squat', 4, 5, 6, '3 min', 180),
-        _s('rdl', 3, 8, 8, '2 min', 120),
-        _s('leg_press', 3, 10, 12, '75 s', 75),
-        _s('standing_calf_raise', 3, 12, 15, '75 s', 75),
-        _s('standing_leg_curl', 3, 10, 12, '45 s', 45),
+        Alternating('Hinge', (
+            _s('trap_bar_deadlift', 3, 5, 5, '2.5 min', 150),
+            _s('rdl', 3, 8, 8, '2.5 min', 150),
+        )),
+        _s('leg_extension', 3, 8, 10, '60 s', 60),
+        _s('standing_leg_curl', 3, 6, 8, '60 s', 60),
+        _s('seated_calf_raise', 4, 8, 10, '45 s', 45, note=CALF_NOTE),
     )),
     Day('day3', 'Day 3', 'Upper — Shoulders & Back', (
         _s('ohp', 4, 6, 8, '2.5 min', 150, per='arm'),
@@ -132,12 +159,14 @@ DAYS = [
         _s('bayesian_cable_curl', 3, 6, 8, group='C1'),
         _s('db_oh_triceps', 3, 6, 8, '45 s after pair', 45, 'C2'),
     )),
-    Day('day4', 'Day 4', 'Lower — Trap-bar Deadlift', (
-        _s('trap_bar_deadlift', 3, 5, 5, '3 min', 180),
-        _s('back_squat', 3, 8, 8, '2 min', 120),
-        _s('leg_press', 3, 10, 12, '75 s', 75),
-        _s('leg_extension', 3, 12, 15, group='A1'),
-        _s('standing_calf_raise', 3, 12, 15, '45 s after pair', 45, 'A2'),
+    # Leg day 1: quads first, hamstrings and calves kept at full volume.
+    Day('day4', 'Day 4', 'Lower — Quads', (
+        _s('back_squat', 3, 8, 8, '2.5 min', 150),
+        _s('seated_leg_curl', 3, 6, 8, '60 s', 60),
+        _s('leg_press', 3, 6, 8, '2 min', 120, note='Feet low and narrow, full depth'),
+        _s('standing_calf_raise', 4, 8, 10, '45 s', 45, note=CALF_NOTE),
+        _s('bulgarian_split_squat', 3, 8, 10, '60 s', 60, per='leg'),
+        _s('leg_extension', 3, 8, 10, '60 s', 60, note='Last set: add 5–8 half reps in the bottom range'),
     )),
 ]
 DAYS_BY_SLUG = {d.slug: d for d in DAYS}
@@ -165,7 +194,7 @@ class Track:
 def _tracks():
     ranges = {}
     for d in DAYS:
-        for s in d.slots:
+        for s in d.all_slots:
             seen = ranges.setdefault(s.lift.slug, [])
             if (s.low, s.high) not in seen:
                 seen.append((s.low, s.high))

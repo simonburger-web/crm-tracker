@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import AUTO_COMPLETE, ActiveSession, LiftLog, LiftState, WeightEdit, Workout
-from .programme import DAYS, DAYS_BY_SLUG, KINDS, TRACKS
+from .programme import DAYS, DAYS_BY_SLUG, KINDS, TRACKS, Alternating
 from .progression import next_set_weight, next_start, plates_per_side, top_weight
 
 # The gym clock: "today" and workout dates are shown in local time, not the server's UTC.
@@ -40,6 +40,34 @@ def _next_day(last_workout):
         return DAYS[0]
     idx = next((i for i, d in enumerate(DAYS) if d.slug == last_workout.day), -1)
     return DAYS[(idx + 1) % len(DAYS)]
+
+
+def _turn(programme_day, alt, saved=None):
+    """Which option of an alternating spot is on this session, and which comes after it.
+
+    One the running session already has sets for stays put. Otherwise it's the option after the one logged
+    in the last completed session of this day that logged any of them; the first option if none ever was."""
+    keys = [o.track.key for o in alt.options]
+    for i, key in enumerate(keys):
+        if (saved or {}).get(key):
+            break
+    else:
+        last = (LiftLog.objects.filter(workout__day=programme_day.slug, slug__in=keys)
+                .order_by('-workout__completed_at', '-pk').values_list('slug', flat=True).first())
+        i = (keys.index(last) + 1) % len(keys) if last else 0
+    return alt.options[i], alt.options[(i + 1) % len(keys)]
+
+
+def _resolve_slots(programme_day, saved=None):
+    """The day's slots for this session in order: [(slot, alternating spot or None, the option after)]."""
+    out = []
+    for entry in programme_day.slots:
+        if isinstance(entry, Alternating):
+            slot, after = _turn(programme_day, entry, saved)
+            out.append((slot, entry, after))
+        else:
+            out.append((entry, None, None))
+    return out
 
 
 def _fmt(weight):
@@ -155,11 +183,13 @@ def day(request, day):
     here = session is not None and session.day == programme_day.slug
     saved = session.sets if here else {}
     states = _states()
-    last = _last_logs([slot.track.key for slot in programme_day.slots])
+    resolved = _resolve_slots(programme_day, saved)
+    last = _last_logs([slot.track.key for slot, _, _ in resolved])
     cards = []
-    for slot in programme_day.slots:
+    for slot, alt, after in resolved:
         key = slot.track.key
         cards.append({'slot': slot, 'key': key, 'rows': _set_rows(slot, states.get(key), saved.get(key) or []),
+                      'alt': alt, 'alt_next': after,
                       **_progress(slot.track, states.get(key), last.get(key))})
     last_done = Workout.objects.filter(day=programme_day.slug).first()
     return render(request, 'gym/day.html', {
@@ -185,7 +215,7 @@ def _start_day(request, programme_day):
             if autosave:
                 return HttpResponse(status=204)
             session = ActiveSession(day=programme_day.slug, started_at=timezone.now())
-        for slot in programme_day.slots:
+        for slot in programme_day.all_slots:
             key = slot.track.key
             names = [(f's-{key}-{i}-w', f's-{key}-{i}-r') for i in range(slot.sets)]
             if not any(w in request.POST or r in request.POST for w, r in names):
@@ -222,7 +252,7 @@ def _complete_day(request, programme_day, session):
     workout = Workout.objects.create(day=programme_day.slug, completed_at=session.counts_at)
     states = {s.slug: s for s in LiftState.objects.select_for_update()}
     changes, logged_any = [], False
-    for slot in programme_day.slots:
+    for slot in programme_day.all_slots:  # every option of an alternating spot: log whichever was done
         track = slot.track
         sets = _logged(session.sets.get(track.key))
         if not sets:
