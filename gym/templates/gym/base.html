@@ -25,6 +25,10 @@
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; background: var(--bg); color: var(--text); }
+    /* No double-tap-to-zoom: taps fire straight away instead of waiting to see if a second tap follows,
+       and quick repeated taps on the steppers all count. Pinch zoom still works. */
+    html, a, button, input, label { touch-action: manipulation; }
+    button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     body {
       font-family: Barlow, system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.4;
       font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
@@ -80,6 +84,10 @@
     {% for message in messages %}<div class="msg">{{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}
   </main>
+  <script>
+    // iOS Safari only applies :active (pressed) styles when a touch listener exists.
+    document.addEventListener('touchstart', function () {}, { passive: true });
+  </script>
   {% block script %}{% endblock %}
 </body>
 </html>
